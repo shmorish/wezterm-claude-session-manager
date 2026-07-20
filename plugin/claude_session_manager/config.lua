@@ -4,6 +4,8 @@ M.defaults = {
   picker = {
     title = "Claude Code Sessions",
     fuzzy = true,
+    -- ペイン幅に合わせて一覧を横中央寄せする (縦は wezterm の制約で不可)
+    center = true,
   },
   -- 停止中はユーザーの対応が必要なので赤で目立たせる
   icons = { running = "🟡", waiting = "🔴", done = "🟢" },

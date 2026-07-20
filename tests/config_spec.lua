@@ -34,6 +34,7 @@ t.eq(config.defaults.icons.done, "🟢", "done icon is green")
 t.eq(config.defaults.labels.running, "Running", "default labels are English")
 t.eq(config.defaults.picker.title, "Claude Code Sessions", "default picker title")
 t.eq(config.defaults.picker.fuzzy, true, "default picker fuzzy mode")
+t.eq(config.defaults.picker.center, true, "default picker centering")
 t.eq(config.defaults.sidebar, nil, "sidebar config removed")
 
 -- 既定キーバインドは CMD+s、false で無効化できる

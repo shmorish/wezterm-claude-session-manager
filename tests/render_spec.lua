@@ -45,6 +45,23 @@ t.contains(multi_ws[1].label .. multi_ws[2].label, "[work]", "workspace tag when
 local no_title = render.choices(sessions, config.merge(cfg, { show_title = false }))
 t.eq(no_title[2].label:find("Karabiner", 1, true), nil, "title hidden when show_title=false")
 
+-- cols を渡すと横中央寄せ (先頭に空白パディング)
+local centered = render.choices(sessions, cfg, 100)
+local pad_len = centered[1].label:match("^( *)"):len()
+t.ok(pad_len > 0, "centered labels have leading padding")
+for i, choice in ipairs(centered) do
+  t.eq(choice.label:match("^( *)"):len(), pad_len, "uniform padding for row " .. i)
+end
+t.ok(render.display_width(centered[1].label) <= 100, "centered label fits in cols")
+
+-- center = false なら cols を渡してもパディングしない
+local no_center = render.choices(sessions, config.merge(cfg, { picker = { center = false } }), 100)
+t.eq(no_center[1].label:match("^( *)"):len(), 0, "no padding when center=false")
+
+-- cols が狭い時はパディングなしで従来どおり
+local narrow = render.choices(sessions, cfg, 20)
+t.eq(narrow[1].label:match("^( *)"):len(), 0, "no padding when pane too narrow")
+
 -- セッション0件はプレースホルダ1件
 local empty = render.choices({}, cfg)
 t.eq(#empty, 1, "placeholder for empty list")

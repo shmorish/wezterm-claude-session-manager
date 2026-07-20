@@ -48,11 +48,16 @@ function M.show(wezterm, cfg, window, pane)
     by_id[tostring(session.pane_id)] = session
   end
 
+  local cols
+  pcall(function()
+    cols = pane:get_dimensions().cols
+  end)
+
   window:perform_action(
     wezterm.action.InputSelector({
       title = cfg.picker.title,
       fuzzy = cfg.picker.fuzzy,
-      choices = render.choices(sessions, cfg),
+      choices = render.choices(sessions, cfg, cols),
       action = wezterm.action_callback(function(cb_window, cb_pane, id, _label)
         -- id が nil (Esc) や空 (プレースホルダ) なら何もしない
         local session = id and by_id[id]

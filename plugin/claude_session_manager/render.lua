@@ -117,9 +117,29 @@ local function max_label_width(cfg)
   return width
 end
 
+-- 全 choices のラベル先頭に空白を足して横中央寄せする。
+-- InputSelector に位置指定オプションがないための擬似センタリング
+local function center_choices(choices, cols)
+  local max_width = 0
+  for _, choice in ipairs(choices) do
+    max_width = math.max(max_width, M.display_width(choice.label))
+  end
+  local pad = math.floor((cols - max_width) / 2)
+  if pad <= 0 then
+    return choices
+  end
+  local padding = string.rep(" ", pad)
+  local centered = {}
+  for i, choice in ipairs(choices) do
+    centered[i] = { id = choice.id, label = padding .. choice.label }
+  end
+  return centered
+end
+
 -- InputSelector 用の選択肢を生成する (純粋関数)。
 -- label 例: "🟡 dotfiles           Running  ✳ 作業タイトル [work]"
-function M.choices(sessions, cfg)
+-- cols (表示先ペインの桁数) を渡すと picker.center に従い横中央寄せする
+function M.choices(sessions, cfg, cols)
   if #sessions == 0 then
     return { { id = "", label = "  (no sessions)" } }
   end
@@ -148,6 +168,9 @@ function M.choices(sessions, cfg)
       id = tostring(session.pane_id),
       label = table.concat(parts),
     }
+  end
+  if cols and cfg.picker.center then
+    return center_choices(choices, cols)
   end
   return choices
 end

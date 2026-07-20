@@ -61,6 +61,7 @@ csm.apply_to_config(config, {
   picker = {
     title = "Claude Code Sessions",
     fuzzy = true,             -- ファジー検索
+    center = true,            -- 一覧をペイン幅に対して横中央寄せ
   },
   icons  = { running = "🟡", waiting = "🔴", done = "🟢" },
   labels = { running = "Running", waiting = "Waiting", done = "Done" },
