@@ -57,6 +57,7 @@ function M.show(wezterm, cfg, window, pane)
     wezterm.action.InputSelector({
       title = cfg.picker.title,
       fuzzy = cfg.picker.fuzzy,
+      alphabet = cfg.picker.alphabet,
       choices = render.choices(sessions, cfg, cols),
       action = wezterm.action_callback(function(cb_window, cb_pane, id, _label)
         -- id が nil (Esc) や空 (プレースホルダ) なら何もしない

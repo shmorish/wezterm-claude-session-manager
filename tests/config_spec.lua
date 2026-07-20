@@ -33,7 +33,8 @@ t.eq(config.defaults.icons.done, "🟢", "done icon is green")
 -- 既定は英語ラベル・モーダル (picker) 設定
 t.eq(config.defaults.labels.running, "Running", "default labels are English")
 t.eq(config.defaults.picker.title, "Claude Code Sessions", "default picker title")
-t.eq(config.defaults.picker.fuzzy, true, "default picker fuzzy mode")
+t.eq(config.defaults.picker.fuzzy, false, "default is number-select mode, not fuzzy")
+t.eq(config.defaults.picker.alphabet, "123456789", "number keys for quick selection")
 t.eq(config.defaults.picker.center, true, "default picker centering")
 t.eq(config.defaults.sidebar, nil, "sidebar config removed")
 

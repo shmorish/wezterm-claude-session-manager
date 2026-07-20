@@ -3,7 +3,11 @@ local M = {}
 M.defaults = {
   picker = {
     title = "Claude Code Sessions",
-    fuzzy = true,
+    -- 既定は番号キー選択モード (数字キーで即ジャンプ、/ で検索に切替)。
+    -- true にすると最初からファジー検索で開く
+    fuzzy = false,
+    -- 各行に割り当てる選択キー。10件以上は ↑↓ + Enter で選択
+    alphabet = "123456789",
     -- ペイン幅に合わせて一覧を横中央寄せする (縦は wezterm の制約で不可)
     center = true,
   },
