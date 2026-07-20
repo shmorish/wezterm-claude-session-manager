@@ -25,8 +25,13 @@ t.eq(#merged_list.patterns.waiting, 1, "list is replaced, not merged")
 t.eq(merged_list.patterns.waiting[1], "custom prompt", "replaced list content")
 t.eq(merged_list.patterns.running[1], "esc to interrupt", "sibling list survives")
 
+-- 既定アイコン: 対応が必要な停止中が赤、実行中は黄、完了は緑
+t.eq(config.defaults.icons.waiting, "🔴", "waiting icon is red")
+t.eq(config.defaults.icons.running, "🟡", "running icon is yellow")
+t.eq(config.defaults.icons.done, "🟢", "done icon is green")
+
 -- defaults は変異しない (イミュータブル)
-t.eq(config.defaults.icons.running, "🔴", "defaults not mutated by merge")
+t.eq(config.defaults.icons.running, "🟡", "defaults not mutated by merge")
 t.eq(config.defaults.scan_lines, 40, "defaults scalar not mutated")
 
 t.finish("config_spec")

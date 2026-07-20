@@ -8,7 +8,8 @@ M.defaults = {
     -- サイドバーペインで動かす表示用のダミープロセス
     command = { "tail", "-f", "/dev/null" },
   },
-  icons = { running = "🔴", waiting = "🟡", done = "🟢" },
+  -- 停止中はユーザーの対応が必要なので赤で目立たせる
+  icons = { running = "🟡", waiting = "🔴", done = "🟢" },
   labels = { running = "実行中", waiting = "停止中", done = "完了" },
   patterns = {
     -- ペイン末尾テキストの状態判定パターン (小文字・部分一致)。

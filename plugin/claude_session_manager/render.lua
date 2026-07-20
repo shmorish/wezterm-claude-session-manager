@@ -1,7 +1,7 @@
 local M = {}
 
 local ESC = string.char(27)
-local LABEL_COLORS = { running = "31", waiting = "33", done = "32" }
+local LABEL_COLORS = { running = "33", waiting = "31", done = "32" }
 
 local function paint(text, code, ansi)
   if not ansi then
