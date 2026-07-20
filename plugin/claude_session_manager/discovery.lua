@@ -22,7 +22,7 @@ local function pane_cwd(pane, info)
   return info and info.cwd or nil
 end
 
-local function build_session(wezterm, cfg, workspace, pane)
+local function build_session(wezterm, cfg, workspace, mux_window_id, pane)
   local info = pane:get_foreground_process_info()
   if not info or not detect.is_claude(info, cfg.patterns.process) then
     return nil
@@ -33,6 +33,7 @@ local function build_session(wezterm, cfg, workspace, pane)
   return {
     pane_id = pane:pane_id(),
     workspace = workspace,
+    mux_window_id = mux_window_id,
     cwd = cwd,
     name = render.project_name(cwd, cfg.cwd_display, wezterm.home_dir) or title,
     state = state.classify(text, cfg.patterns),
@@ -51,9 +52,10 @@ function M.collect(wezterm, cfg)
   for _, mux_window in ipairs(windows) do
     pcall(function()
       local workspace = mux_window:get_workspace()
+      local mux_window_id = mux_window:window_id()
       for _, tab in ipairs(mux_window:tabs()) do
         for _, pane in ipairs(tab:panes()) do
-          local ok, session = pcall(build_session, wezterm, cfg, workspace, pane)
+          local ok, session = pcall(build_session, wezterm, cfg, workspace, mux_window_id, pane)
           if ok and session then
             sessions[#sessions + 1] = session
           end

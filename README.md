@@ -1,32 +1,28 @@
 # wezterm-claude-session-manager
 
-A wezterm plugin that shows all running [Claude Code](https://claude.com/claude-code) sessions in a toggleable sidebar with live status.
+A wezterm plugin that lists all running [Claude Code](https://claude.com/claude-code) sessions in a modal picker — see each session's status at a glance and jump to it.
 
-wezterm 上で並行して動いている Claude Code のセッションを、左サイドバーで一覧・状態監視できる wezterm プラグインです。
+wezterm 上で並行して動いている Claude Code のセッションを、モーダル(オーバーレイ)で一覧表示する wezterm プラグインです。各セッションの状態が一目でわかり、選択するとそのペインへジャンプできます。
 
 ```
- Claude Code Sessions
- ────────────────────────────
- [default]
- 🟡 dotfiles           Running
-    ✳ Karabinerの設定を修正
- 🔴 my-app             Waiting
-    ✳ APIエンドポイントの実装
- 🟢 api-server         Done
-    ✳ バグ修正
-
- 3 sessions
+┌─ Claude Code Sessions ───────────────────────────────┐
+│ > 検索…                                              │
+│                                                      │
+│  🟡 dotfiles           Running  ✳ Karabinerの設定    │
+│  🔴 my-app             Waiting  ✳ APIの実装          │
+│  🟢 api-server         Done     ✳ バグ修正           │
+└──────────────────────────────────────────────────────┘
 ```
 
 - **Running** 🟡 — Claude が生成・ツール実行中
 - **Waiting** 🔴 — 権限確認などでユーザーの応答待ち(要対応)
 - **Done** 🟢 — 応答が終わり、次の入力を待っているだけ
 
-サイドバーはキーバインドで開閉でき、開いている間は約1秒ごとに自動更新されます(表示専用)。外部依存はありません(fzf 等は不要)。
+**`CMD+s`** でモーダルを開き、**Esc** で閉じる / **Enter** で選択したセッションのペインへジャンプします(別 workspace のセッションは workspace ごと切り替え)。ファジー検索対応。外部依存はありません。
 
 ## 必要環境
 
-- wezterm 20240127 以降(`Url` オブジェクト対応版)
+- wezterm 20240127 以降
 - ローカルペインのみ対応(SSH / mux リモートのペインはプロセス情報が取れないため一覧に出ません)
 
 ## インストール
@@ -43,7 +39,7 @@ csm.apply_to_config(config, {})
 return config
 ```
 
-これだけで **`CMD+s`** にトグルが割り当てられ、押すたびにサイドバーが開く / 閉じるを切り替えます。
+これだけで **`CMD+s`** にセッション一覧モーダルが割り当てられます。
 
 キーを変えたい / 自動割り当てを止めたい場合:
 
@@ -53,7 +49,7 @@ csm.apply_to_config(config, { keybind = { key = "b", mods = "CTRL|SHIFT" } })
 
 -- 自動割り当てを無効化して手動で設定
 csm.apply_to_config(config, { keybind = false })
-table.insert(config.keys, { key = "b", mods = "LEADER", action = csm.action.toggle_sidebar })
+table.insert(config.keys, { key = "b", mods = "LEADER", action = csm.action.show_picker })
 ```
 
 ## 設定
@@ -62,10 +58,9 @@ table.insert(config.keys, { key = "b", mods = "LEADER", action = csm.action.togg
 
 ```lua
 csm.apply_to_config(config, {
-  sidebar = {
-    position = "Left",   -- "Left" | "Right"
-    width = 0.18,        -- ウィンドウ幅に対する割合
+  picker = {
     title = "Claude Code Sessions",
+    fuzzy = true,             -- ファジー検索
   },
   icons  = { running = "🟡", waiting = "🔴", done = "🟢" },
   labels = { running = "Running", waiting = "Waiting", done = "Done" },
@@ -76,15 +71,13 @@ csm.apply_to_config(config, {
     -- プロセス名 / argv に対する Lua パターン
     process = { "^claude$", "claude%-code" },
   },
-  keybind = { key = "s", mods = "CMD" },  -- トグルキー (false で自動割り当てなし)
+  keybind = { key = "s", mods = "CMD" },  -- モーダル表示キー (false で自動割り当てなし)
   scan_lines = 40,            -- 状態判定に読むペイン末尾の行数
   cwd_display = "basename",   -- "basename" | "shortened" | "full"
   max_name_width = 18,        -- プロジェクト名の表示幅
-  show_title = true,          -- ペインタイトル (作業内容) を2行目に表示
+  show_title = true,          -- ペインタイトル (作業内容) を一覧に表示
 })
 ```
-
-更新間隔は wezterm 本体の `config.status_update_interval`(既定 1000ms)に従います。
 
 ラベルを日本語にしたい場合:
 
@@ -96,10 +89,10 @@ csm.apply_to_config(config, {
 
 ### カスタム利用
 
-サイドバーを使わず自分のステータスバーに組み込むこともできます:
+自分のステータスバー等に組み込むこともできます:
 
 ```lua
-local counts = csm.counts()    -- { running = 1, waiting = 0, done = 2, total = 3 }
+local counts = csm.counts()     -- { running = 1, waiting = 0, done = 2, total = 3 }
 local sessions = csm.sessions() -- { { pane_id, workspace, cwd, name, state, title }, ... }
 ```
 
@@ -107,17 +100,11 @@ local sessions = csm.sessions() -- { { pane_id, workspace, cwd, name, state, tit
 
 各ペインの `get_foreground_process_info()` から Claude Code のプロセス(ネイティブ版 `claude`、npm 版 `node .../claude-code/cli.js`、子プロセスツリー内も含む)を検出し、ペイン末尾のテキストをパターンマッチして状態を決めます:
 
-1. `esc to interrupt` を含む → **実行中**
-2. `do you want` / `❯ 1.` を含む(権限プロンプト) → **停止中**
-3. どちらもなし → **完了**
+1. `esc to interrupt` を含む → **Running**
+2. `do you want` / `❯ 1.` を含む(権限プロンプト) → **Waiting**
+3. どちらもなし → **Done**
 
 Claude Code のアップデートで TUI の文言が変わった場合は `patterns` を上書きしてください。
-
-## 制限事項
-
-- サイドバーはトグルしたタブ内のペインとして開きます。別のタブに移動すると見えなくなります(トグルで閉じて開き直してください)
-- 描画には experimental な `pane:inject_output()` を使用しています
-- サイドバー自体は表示専用です(選択してジャンプする機能はありません)
 
 ## 開発
 

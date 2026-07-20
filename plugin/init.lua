@@ -28,37 +28,34 @@ end
 local config_mod = require("claude_session_manager.config")
 local discovery = require("claude_session_manager.discovery")
 local render = require("claude_session_manager.render")
-local sidebar = require("claude_session_manager.sidebar")
+local picker = require("claude_session_manager.picker")
 
 local M = {}
 
 local current_config = config_mod.defaults
 
--- apply_to_config が呼ばれなくても動くよう、ロード時に一度だけフックを登録する
-sidebar.attach(wezterm, function()
-  return current_config
-end)
-
 function M.apply_to_config(config, opts)
   current_config = config_mod.merge(config_mod.defaults, opts or {})
 
-  -- 既定で CMD+s にトグルを割り当てる (keybind = false で無効化)
+  -- 既定で CMD+s にモーダル表示を割り当てる (keybind = false で無効化)
   local keybind = current_config.keybind
   if config and keybind then
     config.keys = config.keys or {}
     table.insert(config.keys, {
       key = keybind.key,
       mods = keybind.mods,
-      action = M.action.toggle_sidebar,
+      action = M.action.show_picker,
     })
   end
 end
 
 M.action = {
-  toggle_sidebar = wezterm.action_callback(function(window, pane)
-    sidebar.toggle(wezterm, current_config, window, pane)
+  show_picker = wezterm.action_callback(function(window, pane)
+    picker.show(wezterm, current_config, window, pane)
   end),
 }
+-- 旧サイドバー時代の名前からの後方互換
+M.action.toggle_sidebar = M.action.show_picker
 
 -- カスタムステータスバー等で使える生データ
 function M.sessions()

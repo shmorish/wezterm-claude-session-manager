@@ -1,15 +1,5 @@
 local M = {}
 
-local ESC = string.char(27)
-local LABEL_COLORS = { running = "33", waiting = "31", done = "32" }
-
-local function paint(text, code, ansi)
-  if not ansi then
-    return text
-  end
-  return ESC .. "[" .. code .. "m" .. text .. ESC .. "[0m"
-end
-
 local function char_width(codepoint)
   if codepoint == 0x2026 then -- …
     return 1
@@ -89,27 +79,34 @@ function M.counts(sessions)
   return counts
 end
 
-local function group_by_workspace(sessions)
-  local by_workspace = {}
-  local names = {}
+local function sorted_copy(sessions)
+  local copy = {}
+  for i, session in ipairs(sessions) do
+    copy[i] = session
+  end
+  table.sort(copy, function(a, b)
+    if (a.workspace or "") ~= (b.workspace or "") then
+      return (a.workspace or "") < (b.workspace or "")
+    end
+    if (a.name or "") ~= (b.name or "") then
+      return (a.name or "") < (b.name or "")
+    end
+    return (a.pane_id or 0) < (b.pane_id or 0)
+  end)
+  return copy
+end
+
+local function workspace_count(sessions)
+  local seen = {}
+  local count = 0
   for _, session in ipairs(sessions) do
     local workspace = session.workspace or "default"
-    if not by_workspace[workspace] then
-      by_workspace[workspace] = {}
-      names[#names + 1] = workspace
+    if not seen[workspace] then
+      seen[workspace] = true
+      count = count + 1
     end
-    table.insert(by_workspace[workspace], session)
   end
-  table.sort(names)
-  for _, sessions_in_ws in pairs(by_workspace) do
-    table.sort(sessions_in_ws, function(a, b)
-      if a.name ~= b.name then
-        return (a.name or "") < (b.name or "")
-      end
-      return (a.pane_id or 0) < (b.pane_id or 0)
-    end)
-  end
-  return names, by_workspace
+  return count
 end
 
 local function max_label_width(cfg)
@@ -120,61 +117,39 @@ local function max_label_width(cfg)
   return width
 end
 
-local function session_lines(session, cfg, widths, out)
-  local icon = cfg.icons[session.state] or "•"
-  local label = cfg.labels[session.state] or session.state
-  local name = M.truncate(session.name or "?", widths.name)
-  out[#out + 1] = " "
-    .. icon
-    .. " "
-    .. M.pad(name, widths.name)
-    .. " "
-    .. paint(label, LABEL_COLORS[session.state] or "0", cfg.ansi)
-  if cfg.show_title and session.title and session.title ~= "" then
-    local title = M.truncate(session.title, widths.name + widths.label + 1)
-    out[#out + 1] = paint("    " .. title, "2", cfg.ansi)
-  end
-end
-
--- セッション一覧をサイドバー描画用の行配列に変換する (純粋関数)。
--- max_cols (サイドバーペインの桁数) を渡すと全行がその幅に収まる
-function M.lines(sessions, cfg, max_cols)
-  local label_width = max_label_width(cfg)
-  local name_width = cfg.max_name_width
-  if max_cols then
-    -- 行構成: " " + icon(2) + " " + name + " " + label
-    name_width = math.max(8, math.min(name_width, max_cols - label_width - 5))
-  end
-  local widths = { name = name_width, label = label_width }
-
-  local out = {}
-  out[#out + 1] = ""
-  out[#out + 1] = paint(" " .. M.truncate(cfg.sidebar.title, name_width + label_width + 4), "1", cfg.ansi)
-  out[#out + 1] = paint(" " .. string.rep("─", name_width + label_width + 4), "2", cfg.ansi)
-
+-- InputSelector 用の選択肢を生成する (純粋関数)。
+-- label 例: "🟡 dotfiles           Running  ✳ 作業タイトル [work]"
+function M.choices(sessions, cfg)
   if #sessions == 0 then
-    out[#out + 1] = ""
-    out[#out + 1] = paint("  (no sessions)", "2", cfg.ansi)
-    return out
+    return { { id = "", label = "  (no sessions)" } }
   end
 
-  local names, by_workspace = group_by_workspace(sessions)
-  for _, workspace in ipairs(names) do
-    out[#out + 1] = ""
-    out[#out + 1] = paint(M.truncate(" [" .. workspace .. "]", name_width + label_width + 5), "36", cfg.ansi)
-    for _, session in ipairs(by_workspace[workspace]) do
-      session_lines(session, cfg, widths, out)
+  local label_width = max_label_width(cfg)
+  local multi_workspace = workspace_count(sessions) > 1
+  local choices = {}
+  for _, session in ipairs(sorted_copy(sessions)) do
+    local icon = cfg.icons[session.state] or "•"
+    local state_label = cfg.labels[session.state] or session.state
+    local name = M.truncate(session.name or "?", cfg.max_name_width)
+    local parts = {
+      icon,
+      " ",
+      M.pad(name, cfg.max_name_width),
+      " ",
+      M.pad(state_label, label_width),
+    }
+    if cfg.show_title and session.title and session.title ~= "" then
+      parts[#parts + 1] = "  " .. M.truncate(session.title, 48)
     end
+    if multi_workspace then
+      parts[#parts + 1] = " [" .. (session.workspace or "default") .. "]"
+    end
+    choices[#choices + 1] = {
+      id = tostring(session.pane_id),
+      label = table.concat(parts),
+    }
   end
-
-  local counts = M.counts(sessions)
-  out[#out + 1] = ""
-  out[#out + 1] = paint(
-    string.format(" %d session%s", counts.total, counts.total == 1 and "" or "s"),
-    "2",
-    cfg.ansi
-  )
-  return out
+  return choices
 end
 
 return M

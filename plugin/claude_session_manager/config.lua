@@ -1,12 +1,9 @@
 local M = {}
 
 M.defaults = {
-  sidebar = {
-    position = "Left",
-    width = 0.18,
+  picker = {
     title = "Claude Code Sessions",
-    -- サイドバーペインで動かす表示用のダミープロセス
-    command = { "tail", "-f", "/dev/null" },
+    fuzzy = true,
   },
   -- 停止中はユーザーの対応が必要なので赤で目立たせる
   icons = { running = "🟡", waiting = "🔴", done = "🟢" },
@@ -19,13 +16,12 @@ M.defaults = {
     -- プロセス名/argv に対する Lua パターン
     process = { "^claude$", "claude%-code" },
   },
-  -- apply_to_config で自動登録されるトグルキー。false で無効化
+  -- apply_to_config で自動登録されるモーダル表示キー。false で無効化
   keybind = { key = "s", mods = "CMD" },
   scan_lines = 40,
   cwd_display = "basename", -- "basename" | "shortened" | "full"
   max_name_width = 18,
   show_title = true,
-  ansi = true,
 }
 
 local function is_list(value)

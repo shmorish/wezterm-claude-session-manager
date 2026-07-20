@@ -15,7 +15,7 @@ local merged = config.merge(config.defaults, {
 t.eq(merged.icons.running, ">>", "override nested value")
 t.eq(merged.icons.done, config.defaults.icons.done, "sibling nested values survive")
 t.eq(merged.scan_lines, 10, "override scalar")
-t.eq(merged.sidebar.width, config.defaults.sidebar.width, "untouched branch survives")
+t.eq(merged.picker.title, config.defaults.picker.title, "untouched branch survives")
 
 -- 配列 (パターンリスト) は丸ごと置き換え
 local merged_list = config.merge(config.defaults, {
@@ -30,9 +30,11 @@ t.eq(config.defaults.icons.waiting, "🔴", "waiting icon is red")
 t.eq(config.defaults.icons.running, "🟡", "running icon is yellow")
 t.eq(config.defaults.icons.done, "🟢", "done icon is green")
 
--- 既定は英語ラベル・幅は 0.18
+-- 既定は英語ラベル・モーダル (picker) 設定
 t.eq(config.defaults.labels.running, "Running", "default labels are English")
-t.eq(config.defaults.sidebar.width, 0.18, "default sidebar width")
+t.eq(config.defaults.picker.title, "Claude Code Sessions", "default picker title")
+t.eq(config.defaults.picker.fuzzy, true, "default picker fuzzy mode")
+t.eq(config.defaults.sidebar, nil, "sidebar config removed")
 
 -- 既定キーバインドは CMD+s、false で無効化できる
 t.eq(config.defaults.keybind.key, "s", "default keybind key")
