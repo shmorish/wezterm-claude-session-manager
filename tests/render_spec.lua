@@ -18,12 +18,12 @@ local joined = table.concat(lines, "\n")
 t.contains(joined, "Claude Code Sessions", "title rendered")
 t.contains(joined, "[default]", "workspace group header")
 t.contains(joined, "[work]", "second workspace group header")
-t.contains(joined, "🔴", "running icon rendered")
-t.contains(joined, "実行中", "running label rendered")
-t.contains(joined, "🟡", "waiting icon rendered")
-t.contains(joined, "停止中", "waiting label rendered")
+t.contains(joined, "🟡", "running icon rendered")
+t.contains(joined, "Running", "running label rendered")
+t.contains(joined, "🔴", "waiting icon rendered")
+t.contains(joined, "Waiting", "waiting label rendered")
 t.contains(joined, "🟢", "done icon rendered")
-t.contains(joined, "完了", "done label rendered")
+t.contains(joined, "Done", "done label rendered")
 t.contains(joined, "dotfiles", "project name rendered")
 t.contains(joined, "3 sessions", "session count footer")
 t.contains(joined, "Karabiner", "pane title shown under session")
@@ -63,7 +63,14 @@ local narrow = render.lines(sessions, cfg, 22)
 for i, line in ipairs(narrow) do
   t.ok(render.display_width(line) <= 22, "narrow line " .. i .. " fits in 22 cols")
 end
-t.contains(table.concat(narrow, "\n"), "実行中", "labels survive narrow width")
+t.contains(table.concat(narrow, "\n"), "Running", "labels survive narrow width")
+
+-- ラベルは設定で日本語にも上書きできる
+local jp = table.concat(
+  render.lines(sessions, config.merge(cfg, { labels = { running = "実行中", waiting = "停止中", done = "完了" } })),
+  "\n"
+)
+t.contains(jp, "実行中", "labels overridable to Japanese")
 
 -- プロジェクト名の表示
 t.eq(render.project_name("/Users/x/dev/my-app", "basename", "/Users/x"), "my-app", "basename mode")

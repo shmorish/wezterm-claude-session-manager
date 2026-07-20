@@ -30,6 +30,10 @@ t.eq(config.defaults.icons.waiting, "🔴", "waiting icon is red")
 t.eq(config.defaults.icons.running, "🟡", "running icon is yellow")
 t.eq(config.defaults.icons.done, "🟢", "done icon is green")
 
+-- 既定は英語ラベル・幅は 0.18
+t.eq(config.defaults.labels.running, "Running", "default labels are English")
+t.eq(config.defaults.sidebar.width, 0.18, "default sidebar width")
+
 -- defaults は変異しない (イミュータブル)
 t.eq(config.defaults.icons.running, "🟡", "defaults not mutated by merge")
 t.eq(config.defaults.scan_lines, 40, "defaults scalar not mutated")

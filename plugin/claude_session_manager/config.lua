@@ -3,14 +3,14 @@ local M = {}
 M.defaults = {
   sidebar = {
     position = "Left",
-    width = 0.28,
+    width = 0.18,
     title = "Claude Code Sessions",
     -- サイドバーペインで動かす表示用のダミープロセス
     command = { "tail", "-f", "/dev/null" },
   },
   -- 停止中はユーザーの対応が必要なので赤で目立たせる
   icons = { running = "🟡", waiting = "🔴", done = "🟢" },
-  labels = { running = "実行中", waiting = "停止中", done = "完了" },
+  labels = { running = "Running", waiting = "Waiting", done = "Done" },
   patterns = {
     -- ペイン末尾テキストの状態判定パターン (小文字・部分一致)。
     -- Claude Code の TUI 文言が変わったら上書きする
