@@ -19,6 +19,8 @@ M.defaults = {
     -- プロセス名/argv に対する Lua パターン
     process = { "^claude$", "claude%-code" },
   },
+  -- apply_to_config で自動登録されるトグルキー。false で無効化
+  keybind = { key = "s", mods = "CMD" },
   scan_lines = 40,
   cwd_display = "basename", -- "basename" | "shortened" | "full"
   max_name_width = 18,

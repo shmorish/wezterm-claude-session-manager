@@ -39,8 +39,19 @@ sidebar.attach(wezterm, function()
   return current_config
 end)
 
-function M.apply_to_config(_config, opts)
+function M.apply_to_config(config, opts)
   current_config = config_mod.merge(config_mod.defaults, opts or {})
+
+  -- 既定で CMD+s にトグルを割り当てる (keybind = false で無効化)
+  local keybind = current_config.keybind
+  if config and keybind then
+    config.keys = config.keys or {}
+    table.insert(config.keys, {
+      key = keybind.key,
+      mods = keybind.mods,
+      action = M.action.toggle_sidebar,
+    })
+  end
 end
 
 M.action = {

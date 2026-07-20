@@ -34,6 +34,14 @@ t.eq(config.defaults.icons.done, "🟢", "done icon is green")
 t.eq(config.defaults.labels.running, "Running", "default labels are English")
 t.eq(config.defaults.sidebar.width, 0.18, "default sidebar width")
 
+-- 既定キーバインドは CMD+s、false で無効化できる
+t.eq(config.defaults.keybind.key, "s", "default keybind key")
+t.eq(config.defaults.keybind.mods, "CMD", "default keybind mods")
+t.eq(config.merge(config.defaults, { keybind = false }).keybind, false, "keybind can be disabled")
+local custom_key = config.merge(config.defaults, { keybind = { key = "b", mods = "CTRL|SHIFT" } })
+t.eq(custom_key.keybind.key, "b", "keybind key overridable")
+t.eq(custom_key.keybind.mods, "CTRL|SHIFT", "keybind mods overridable")
+
 -- defaults は変異しない (イミュータブル)
 t.eq(config.defaults.icons.running, "🟡", "defaults not mutated by merge")
 t.eq(config.defaults.scan_lines, 40, "defaults scalar not mutated")

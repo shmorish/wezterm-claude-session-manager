@@ -40,17 +40,21 @@ local config = wezterm.config_builder()
 local csm = wezterm.plugin.require("https://github.com/shmorish/wezterm-claude-session-manager")
 csm.apply_to_config(config, {})
 
-config.keys = config.keys or {}
-table.insert(config.keys, {
-  key = "b",
-  mods = "CTRL|SHIFT",
-  action = csm.action.toggle_sidebar,
-})
-
 return config
 ```
 
-キーを押すたびにサイドバーが開く / 閉じるを切り替えます。
+これだけで **`CMD+s`** にトグルが割り当てられ、押すたびにサイドバーが開く / 閉じるを切り替えます。
+
+キーを変えたい / 自動割り当てを止めたい場合:
+
+```lua
+-- キーを変更
+csm.apply_to_config(config, { keybind = { key = "b", mods = "CTRL|SHIFT" } })
+
+-- 自動割り当てを無効化して手動で設定
+csm.apply_to_config(config, { keybind = false })
+table.insert(config.keys, { key = "b", mods = "LEADER", action = csm.action.toggle_sidebar })
+```
 
 ## 設定
 
@@ -72,6 +76,7 @@ csm.apply_to_config(config, {
     -- プロセス名 / argv に対する Lua パターン
     process = { "^claude$", "claude%-code" },
   },
+  keybind = { key = "s", mods = "CMD" },  -- トグルキー (false で自動割り当てなし)
   scan_lines = 40,            -- 状態判定に読むペイン末尾の行数
   cwd_display = "basename",   -- "basename" | "shortened" | "full"
   max_name_width = 18,        -- プロジェクト名の表示幅
