@@ -126,8 +126,9 @@ local function blank_filter_awk(mode)
   -- vis を作る前処理 (色 SGR 列と CR を除去)
   local strip = [[vis=$0; gsub(/\033\[[0-9;?]*[A-Za-z]/,"",vis); gsub(/\r/,"",vis);]]
   if mode == "squeeze" then
-    -- 連続する空行を 1 行に圧縮しつつ、末尾の空行は出力しない
-    return "{ " .. strip .. [[ if (vis ~ /^[ \t]*$/) pending=1; else { if (pending) print ""; pending=0; print } }]]
+    -- 連続する空行を 1 行に圧縮しつつ、先頭と末尾の空行は出力しない
+    -- (started で最初の内容行より前の空行を抑止する)
+    return "{ " .. strip .. [[ if (vis ~ /^[ \t]*$/) pending=1; else { if (pending && started) print ""; pending=0; started=1; print } }]]
   end
   -- "strip": 空白のみの行をすべて除去する
   return "{ " .. strip .. [[ if (vis !~ /^[ \t]*$/) print }]]
