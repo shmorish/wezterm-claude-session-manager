@@ -116,16 +116,27 @@ end
 -- キャンセル時 (Esc) は呼び出し元ペインへ「戻る」ジャンプを発行する。
 -- ペインを自分で閉じるとエスケープ列のパースやジャンプと競合するため、
 -- user-var 発行後は待機し、クローズは常に Lua 側 (kill) が行う
+-- プレビューの空行処理を行う awk プログラムを選ぶ。
+-- Claude Code の TUI は入力ボックスを最下部に固定し、アイドル時は会話エリアを
+-- 大量の空行でパディングするため、tail に渡す前に空行を間引く。
+-- どちらの awk も ]] を含まないので Lua 長括弧 [[ ]] のまま埋め込める。
+local function blank_filter_awk(mode)
+  if mode == "squeeze" then
+    -- 連続する空行を 1 行に圧縮しつつ、末尾の空行は出力しない
+    return [[NF{ if (pending) print ""; pending=0; print } !NF{ pending=1 }]]
+  end
+  -- "strip": 空白のみの行 (NF==0) をすべて除去する
+  return [[NF]]
+end
+
 local function build_script(fzf, wezterm_bin, list_file, binds, origin_pane_id, cfg)
   local bind_option = binds ~= "" and ("--bind='" .. binds .. "' ") or ""
-  -- awk の正規表現 [^[:space:]] に含まれる ]] が Lua の [[ ]] を閉じてしまうため
-  -- 長括弧レベルを [==[ ]==] に上げている
   return string.format(
-    [==[#!/bin/bash
+    [[#!/bin/bash
 set -u
 selected=$("%s" --ansi --delimiter='\t' --with-nth=2.. --layout=reverse --no-info \
   --prompt='Claude Sessions > ' \
-  --preview='"%s" cli get-text --pane-id {1} | awk '\''{ if ($0 ~ /[^[:space:]]/) { for (; n>0; n--) print ""; print } else n++ }'\'' | tail -n %d' \
+  --preview='"%s" cli get-text --pane-id {1} | awk '\''%s'\'' | tail -n %d' \
   --preview-window='%s' \
   %s< "%s")
 if [ -n "$selected" ]; then
@@ -135,9 +146,10 @@ else
 fi
 printf '\033]1337;SetUserVar=%s=%%s\007' "$(printf %%s "$target" | /usr/bin/base64)"
 exec sleep 15
-]==],
+]],
     fzf,
     wezterm_bin,
+    blank_filter_awk(cfg.picker.preview_blank_mode),
     cfg.picker.preview_lines,
     cfg.picker.preview_window,
     bind_option,

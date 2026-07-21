@@ -19,6 +19,9 @@ M.defaults = {
     popup_size = 0.45, -- popup_mode = "split" 時のペイン高さ (ウィンドウに対する割合)
     preview_window = "right,60%", -- fzf の --preview-window
     preview_lines = 40, -- プレビューに表示するペイン末尾の行数
+    -- プレビューの空行処理: "strip" = 空行を全除去して密に表示、
+    -- "squeeze" = 連続空行を1行に圧縮して区切りを残す
+    preview_blank_mode = "strip",
   },
   -- 停止中はユーザーの対応が必要なので赤で目立たせる
   icons = { running = "🟡", waiting = "🔴", done = "🟢" },
