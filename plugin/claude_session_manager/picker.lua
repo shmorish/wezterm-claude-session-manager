@@ -45,45 +45,59 @@ local function write_file(path, content)
   return true
 end
 
--- 選択されたセッションのペインへジャンプする。
--- 別 workspace なら切り替え、別 OS ウィンドウならフォーカスを移す
-function M.focus_session(wezterm, window, pane, session)
-  local ok, err = pcall(function()
-    if session.workspace and session.workspace ~= wezterm.mux.get_active_workspace() then
-      window:perform_action(
-        wezterm.action.SwitchToWorkspace({ name = session.workspace }),
-        pane
-      )
-    end
-
-    local target = wezterm.mux.get_pane(session.pane_id)
-    if target then
-      target:activate() -- ペインと、それを含むタブがアクティブになる
-    end
-
-    local mux_window = session.mux_window_id and wezterm.mux.get_window(session.mux_window_id)
-    if mux_window then
-      local gui_window = mux_window:gui_window()
-      if gui_window then
-        gui_window:focus()
-      else
-        -- workspace 切替直後は gui_window が取れないことがあるので一度だけ遅延リトライ
-        wezterm.time.call_after(0.2, function()
-          local retried = mux_window:gui_window()
-          if retried then
-            retried:focus()
-          end
-        end)
-      end
-    end
-  end)
-  if not ok then
-    wezterm.log_error("claude-session-manager: failed to focus session: " .. tostring(err))
+-- ジャンプ処理の本体。mux の activate だけでは GUI のキーボードフォーカスが
+-- 追従しないため、GUI アクション (ActivateTab) とウィンドウフォーカスまで行う
+local function apply_focus(wezterm, window, pane, session)
+  -- perform_action(SwitchToWorkspace) は既に閉じたポップアップペインを
+  -- 参照して失敗することがあるため、mux レベル API で切り替える
+  if session.workspace and session.workspace ~= wezterm.mux.get_active_workspace() then
+    wezterm.mux.set_active_workspace(session.workspace)
   end
+
+  local target = wezterm.mux.get_pane(session.pane_id)
+  if not target then
+    return
+  end
+  target:activate() -- mux 上でペインと、それを含むタブがアクティブになる
+
+  local mux_window = session.mux_window_id and wezterm.mux.get_window(session.mux_window_id)
+  if not mux_window then
+    mux_window = target:tab():window()
+  end
+  local gui_window = mux_window and mux_window:gui_window()
+  if not gui_window then
+    -- workspace 切替直後などは gui_window が取れないことがある (再アサートで拾う)
+    return
+  end
+
+  local target_tab_id = target:tab():tab_id()
+  for index, tab in ipairs(mux_window:tabs()) do
+    if tab:tab_id() == target_tab_id then
+      gui_window:perform_action(wezterm.action.ActivateTab(index - 1), target)
+      break
+    end
+  end
+  gui_window:focus()
 end
 
--- pane_id だけからセッション相当の情報を組み立ててジャンプする (user-var 経由)
+-- 選択されたセッションのペインへジャンプする。
+-- 別 workspace なら切り替え、別 OS ウィンドウならフォーカスを移す。
+-- ポップアップクローズ等との競合に備えて少し遅れてもう一度フォーカスを当て直す
+function M.focus_session(wezterm, window, pane, session)
+  local function attempt()
+    local ok, err = pcall(apply_focus, wezterm, window, pane, session)
+    if not ok then
+      wezterm.log_error("claude-session-manager: failed to focus session: " .. tostring(err))
+    end
+  end
+  attempt()
+  wezterm.time.call_after(0.3, attempt)
+end
+
+-- pane_id だけからセッション相当の情報を組み立ててジャンプする (user-var 経由)。
+-- 発行元がこのウィンドウのポップアップなら、ジャンプの前に必ず閉じる
 function M.jump_to_pane(wezterm, window, pane, pane_id)
+  M.close_popup_if_source(wezterm, window, pane)
   local target = wezterm.mux.get_pane(pane_id)
   if not target then
     return
@@ -99,7 +113,9 @@ end
 
 -- fzf を動かす一時スクリプトを生成する。
 -- 選択結果は SetUserVar エスケープシーケンスで Lua 側に渡す。
--- キャンセル時 (Esc / kill) は呼び出し元ペインへ「戻る」ジャンプを発行する
+-- キャンセル時 (Esc) は呼び出し元ペインへ「戻る」ジャンプを発行する。
+-- ペインを自分で閉じるとエスケープ列のパースやジャンプと競合するため、
+-- user-var 発行後は待機し、クローズは常に Lua 側 (kill) が行う
 local function build_script(fzf, wezterm_bin, list_file, binds, origin_pane_id, cfg)
   local bind_option = binds ~= "" and ("--bind='" .. binds .. "' ") or ""
   return string.format(
@@ -116,7 +132,7 @@ else
   target=%d
 fi
 printf '\033]1337;SetUserVar=%s=%%s\007' "$(printf %%s "$target" | /usr/bin/base64)"
-sleep 0.2
+exec sleep 15
 ]],
     fzf,
     wezterm_bin,
@@ -129,47 +145,67 @@ sleep 0.2
   )
 end
 
--- window ごとに開いているポップアップの pane_id を wezterm.GLOBAL の
--- フラットなスカラーキーで追跡する (トグル用)
+-- window ごとに開いているポップアップの pane_id と呼び出し元の pane_id を
+-- wezterm.GLOBAL のフラットなスカラーキーで追跡する (トグル用)。
+-- GLOBAL にテーブルを入れると userdata プロキシ化して読み戻せないため
 local function popup_key(window)
   return "claude_session_manager_popup_" .. tostring(window:mux_window():window_id())
 end
 
-local function stored_popup_id(wezterm, window)
-  local value = wezterm.GLOBAL[popup_key(window)]
+local function origin_key(window)
+  return "claude_session_manager_origin_" .. tostring(window:mux_window():window_id())
+end
+
+local function stored_pane_id(wezterm, key)
+  local value = wezterm.GLOBAL[key]
   if value == nil or value == false then
     return nil
   end
   return tonumber(tostring(value))
 end
 
--- プロセスツリーから fzf の pid を探す
-local function find_fzf_pid(info)
-  if type(info) ~= "table" then
-    return nil
-  end
-  if info.name == "fzf" then
-    return info.pid
-  end
-  for _, child in pairs(info.children or {}) do
-    local pid = find_fzf_pid(child)
-    if pid then
-      return pid
-    end
-  end
-  return nil
+local function clear_popup_state(wezterm, window)
+  wezterm.GLOBAL[popup_key(window)] = false
+  wezterm.GLOBAL[origin_key(window)] = false
 end
 
--- 開いているポップアップを閉じる。fzf を kill するとスクリプトが
--- キャンセル扱いで「元のペインへ戻る」ジャンプを発行して終了する
-local function close_popup(wezterm, popup_pane)
+-- ポップアップペインのプロセスツリー全体 (スクリプト・サブシェル・fzf) を kill する。
+-- ルートの bash が死ぬとペインが閉じる。fzf はペインが閉じても生き残ることが
+-- あるため、ツリーの葉から順に全 pid を明示的に kill する
+local function kill_popup_processes(wezterm, popup_pane)
   local ok, info = pcall(function()
     return popup_pane:get_foreground_process_info()
   end)
-  local pid = ok and info and (find_fzf_pid(info) or info.pid) or nil
-  if pid then
+  if not ok or type(info) ~= "table" then
+    return
+  end
+  local pids = {}
+  local function walk(node)
+    if type(node) ~= "table" then
+      return
+    end
+    for _, child in pairs(node.children or {}) do
+      walk(child)
+    end
+    if node.pid then
+      pids[#pids + 1] = node.pid
+    end
+  end
+  walk(info)
+  for _, pid in ipairs(pids) do
     pcall(wezterm.run_child_process, { "/bin/kill", tostring(pid) })
   end
+end
+
+-- pane がこのウィンドウで開いているポップアップ本体なら閉じて追跡情報をクリアする。
+-- user-var の発行元ペイン (=ポップアップ) をジャンプ前に確実に始末するために使う
+function M.close_popup_if_source(wezterm, window, pane)
+  local stored = stored_pane_id(wezterm, popup_key(window))
+  if not stored or stored ~= pane:pane_id() then
+    return
+  end
+  clear_popup_state(wezterm, window)
+  kill_popup_processes(wezterm, pane)
 end
 
 -- プレビュー付きポップアップペイン (fzf) を開く。失敗したら false を返す
@@ -208,6 +244,7 @@ local function show_fzf_popup(wezterm, cfg, window, pane, sessions)
     return false
   end
   wezterm.GLOBAL[popup_key(window)] = popup:pane_id()
+  wezterm.GLOBAL[origin_key(window)] = pane:pane_id()
   return true
 end
 
@@ -242,14 +279,19 @@ local function show_selector(wezterm, cfg, window, pane, sessions)
 end
 
 -- セッション一覧を表示する (fzf ポップアップ、なければ InputSelector)。
--- ポップアップが既に開いていればトグルとして閉じる
+-- ポップアップが既に開いていればトグルとして閉じ、呼び出し元へフォーカスを戻す。
+-- スクリプトの user-var 発行には依存せず、Lua 側で kill とフォーカスを完結させる
 function M.show(wezterm, cfg, window, pane)
-  local existing_id = stored_popup_id(wezterm, window)
+  local existing_id = stored_pane_id(wezterm, popup_key(window))
   if existing_id then
-    wezterm.GLOBAL[popup_key(window)] = false
+    local origin_id = stored_pane_id(wezterm, origin_key(window))
+    clear_popup_state(wezterm, window)
     local ok, popup_pane = pcall(wezterm.mux.get_pane, existing_id)
     if ok and popup_pane then
-      close_popup(wezterm, popup_pane)
+      kill_popup_processes(wezterm, popup_pane)
+      if origin_id then
+        M.jump_to_pane(wezterm, window, pane, origin_id)
+      end
       return
     end
   end
