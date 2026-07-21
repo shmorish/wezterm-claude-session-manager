@@ -116,24 +116,20 @@ end
 -- キャンセル時 (Esc) は呼び出し元ペインへ「戻る」ジャンプを発行する。
 -- ペインを自分で閉じるとエスケープ列のパースやジャンプと競合するため、
 -- user-var 発行後は待機し、クローズは常に Lua 側 (kill) が行う
--- プレビューの空行処理を行う awk プログラムを選ぶ。
--- Claude Code の TUI は入力ボックスを最下部に固定し、アイドル時は会話エリアを
--- 大量の空行でパディングするため、tail に渡す前に空行を間引く。
--- --escapes 付きの出力は各行末に CR が付き、これを残すと fzf プレビュー最下部に
--- 余分な空行が出るので、まず $0 から CR を除去する (出力・判定の両方に効かせる)。
--- 空行判定は色 SGR 列を除いた見た目コピー vis で行い、出力は色付きの $0 を使う。
--- どちらの awk も ]] を含まないので Lua 長括弧 [[ ]] のまま埋め込める。
-local function blank_filter_awk(mode)
-  -- 前処理: 行末 CR を除去し、色を除いた見た目コピー vis を作る
-  local prep = [[gsub(/\r/,"",$0); vis=$0; gsub(/\033\[[0-9;?]*[A-Za-z]/,"",vis);]]
-  if mode == "squeeze" then
-    -- 連続する空行を 1 行に圧縮しつつ、先頭と末尾の空行は出力しない
-    -- (started で最初の内容行より前の空行を抑止する)
-    return "{ " .. prep .. [[ if (vis ~ /^[ \t]*$/) pending=1; else { if (pending && started) print ""; pending=0; started=1; print } }]]
-  end
-  -- "strip": 空白のみの行をすべて除去する
-  return "{ " .. prep .. [[ if (vis !~ /^[ \t]*$/) print }]]
-end
+-- プレビューの空行を圧縮する awk。Claude Code の TUI は入力ボックスを最下部に固定し、
+-- アイドル時は会話エリアを大量の空行でパディングするため、連続する空行を 1 行に圧縮し、
+-- 先頭・末尾の空行は落とす (started で最初の内容行より前の空行を抑止)。
+-- --escapes 出力は行末 CR と色 SGR 列を含むので、まず $0 から CR を除去し、空行判定は
+-- 色を除いた見た目コピー vis で行う (truecolor 背景の 48:2::r:g:b を潰すため : も含める)。
+-- 出力は色付きの $0 を使う。]] を含まないので Lua 長括弧 [[ ]] のまま埋め込める。
+local SQUEEZE_AWK =
+  [[{ gsub(/\r/,"",$0); vis=$0; gsub(/\033\[[0-9;:?]*[A-Za-z]/,"",vis); if (vis ~ /^[ \t]*$/) pending=1; else { if (pending && started) print ""; pending=0; started=1; print } }]]
+
+-- 圧縮後のコンテンツが短いと fzf がプレビュー窓の下部を空白で埋めてしまう。
+-- 不足分を先頭に空行で詰めてコンテンツを窓の下端へ寄せ、実端末と同じ見え方にする。
+-- fzf が渡す FZF_PREVIEW_LINES を使い、未設定 (0) なら詰めない (従来どおり上詰め)。
+local BOTTOM_ANCHOR_AWK =
+  [[{ line[NR]=$0 } END { win=ENVIRON["FZF_PREVIEW_LINES"]+0; for (i=NR;i<win;i++) print ""; for (i=1;i<=NR;i++) print line[i] }]]
 
 local function build_script(fzf, wezterm_bin, list_file, binds, origin_pane_id, cfg)
   local bind_option = binds ~= "" and ("--bind='" .. binds .. "' ") or ""
@@ -144,7 +140,7 @@ local function build_script(fzf, wezterm_bin, list_file, binds, origin_pane_id, 
 set -u
 selected=$("%s" --ansi --delimiter='\t' --with-nth=2.. --layout=reverse --no-info \
   --prompt='Claude Sessions > ' \
-  --preview='"%s" cli get-text %s--pane-id {1} | awk '\''%s'\'' | tail -n %d' \
+  --preview='"%s" cli get-text %s--pane-id {1} | awk '\''%s'\'' | tail -n %d | awk '\''%s'\''' \
   --preview-window='%s' \
   %s< "%s")
 if [ -n "$selected" ]; then
@@ -158,8 +154,9 @@ exec sleep 15
     fzf,
     wezterm_bin,
     escapes,
-    blank_filter_awk(cfg.picker.preview_blank_mode),
+    SQUEEZE_AWK,
     cfg.picker.preview_lines,
+    BOTTOM_ANCHOR_AWK,
     cfg.picker.preview_window,
     bind_option,
     list_file,
