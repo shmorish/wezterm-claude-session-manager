@@ -118,12 +118,14 @@ end
 -- user-var 発行後は待機し、クローズは常に Lua 側 (kill) が行う
 local function build_script(fzf, wezterm_bin, list_file, binds, origin_pane_id, cfg)
   local bind_option = binds ~= "" and ("--bind='" .. binds .. "' ") or ""
+  -- awk の正規表現 [^[:space:]] に含まれる ]] が Lua の [[ ]] を閉じてしまうため
+  -- 長括弧レベルを [==[ ]==] に上げている
   return string.format(
-    [[#!/bin/bash
+    [==[#!/bin/bash
 set -u
 selected=$("%s" --ansi --delimiter='\t' --with-nth=2.. --layout=reverse --no-info \
   --prompt='Claude Sessions > ' \
-  --preview='"%s" cli get-text --pane-id {1} | tail -n %d' \
+  --preview='"%s" cli get-text --pane-id {1} | awk '\''{ if ($0 ~ /[^[:space:]]/) { for (; n>0; n--) print ""; print } else n++ }'\'' | tail -n %d' \
   --preview-window='%s' \
   %s< "%s")
 if [ -n "$selected" ]; then
@@ -133,7 +135,7 @@ else
 fi
 printf '\033]1337;SetUserVar=%s=%%s\007' "$(printf %%s "$target" | /usr/bin/base64)"
 exec sleep 15
-]],
+]==],
     fzf,
     wezterm_bin,
     cfg.picker.preview_lines,
