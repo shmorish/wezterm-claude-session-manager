@@ -68,6 +68,27 @@ t.eq(#empty, 1, "placeholder for empty list")
 t.eq(empty[1].id, "", "placeholder has empty id")
 t.contains(empty[1].label, "no sessions", "placeholder label")
 
+-- fzf 用の入力行 (id TAB 番号付きラベル)
+local fzf_lines = render.fzf_lines(render.choices(sessions, cfg))
+t.eq(#fzf_lines, 3, "one fzf line per choice")
+t.contains(fzf_lines[1], "3\t1. ", "line = id TAB number prefix") -- api-server (pane 3) が先頭
+t.contains(fzf_lines[2], "1\t2. ", "second line numbered 2")
+t.contains(fzf_lines[1], "api-server", "label preserved in fzf line")
+
+-- 10件目以降は番号なし
+local many = {}
+for i = 1, 11 do
+  many[i] = { id = tostring(i), label = "item" .. i }
+end
+local many_lines = render.fzf_lines(many)
+t.contains(many_lines[9], "\t9. ", "9th line numbered")
+t.eq(many_lines[10]:find("10%."), nil, "10th line has no number prefix")
+
+-- 数字キーバインド生成
+t.eq(render.fzf_binds(3), "1:pos(1)+accept,2:pos(2)+accept,3:pos(3)+accept", "binds for 3 items")
+t.eq(render.fzf_binds(0), "", "no binds for empty list")
+t.ok(not render.fzf_binds(12):find("10:"), "binds capped at 9")
+
 -- counts
 local counts = render.counts(sessions)
 t.eq(counts.running, 1, "counts running")

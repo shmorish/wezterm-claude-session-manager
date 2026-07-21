@@ -34,6 +34,17 @@ local M = {}
 
 local current_config = config_mod.defaults
 
+-- fzf ポップアップからの選択結果 (SetUserVar) を受け取ってジャンプする
+wezterm.on("user-var-changed", function(window, pane, name, value)
+  if name ~= picker.JUMP_USER_VAR then
+    return
+  end
+  local pane_id = tonumber(value)
+  if pane_id then
+    picker.jump_to_pane(wezterm, window, pane, pane_id)
+  end
+end)
+
 function M.apply_to_config(config, opts)
   current_config = config_mod.merge(config_mod.defaults, opts or {})
 

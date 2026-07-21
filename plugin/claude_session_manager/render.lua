@@ -175,4 +175,24 @@ function M.choices(sessions, cfg, cols)
   return choices
 end
 
+-- fzf への入力行を生成する: "<pane_id>\t<番号>. <label>"。
+-- 番号は 1〜9 のみ (数字キー即決バインドに対応する行だけに付ける)
+function M.fzf_lines(choices)
+  local lines = {}
+  for i, choice in ipairs(choices) do
+    local prefix = i <= 9 and (i .. ". ") or "   "
+    lines[i] = choice.id .. "\t" .. prefix .. choice.label
+  end
+  return lines
+end
+
+-- 数字キーで即決するための fzf --bind 文字列 (最大9件)
+function M.fzf_binds(count)
+  local binds = {}
+  for i = 1, math.min(count, 9) do
+    binds[i] = string.format("%d:pos(%d)+accept", i, i)
+  end
+  return table.concat(binds, ",")
+end
+
 return M

@@ -1,34 +1,35 @@
 # wezterm-claude-session-manager
 
-A wezterm plugin that lists all running [Claude Code](https://claude.com/claude-code) sessions in a modal picker — see each session's status at a glance and jump to it.
+A wezterm plugin that lists all running [Claude Code](https://claude.com/claude-code) sessions in a popup with **live preview** — see each session's status and screen at a glance, then jump to it with a single keystroke.
 
-wezterm 上で並行して動いている Claude Code のセッションを、モーダル(オーバーレイ)で一覧表示する wezterm プラグインです。各セッションの状態が一目でわかり、選択するとそのペインへジャンプできます。
+wezterm 上で並行して動いている Claude Code のセッションを、**ライブプレビュー付きのポップアップ**で一覧表示する wezterm プラグインです。↑↓で選択中のセッションの画面がリアルタイムで右側に表示され、数字キー一発でそのペインへジャンプできます。
 
 ```
-┌─ Claude Code Sessions ───────────────────────────────┐
-│                                                      │
-│  1. 🟡 dotfiles           Running  ✳ Karabinerの設定 │
-│  2. 🔴 my-app             Waiting  ✳ APIの実装       │
-│  3. 🟢 api-server         Done     ✳ バグ修正        │
-└──────────────────────────────────────────────────────┘
+├─────────────────────────────────┬──────────────────────────────────┤
+│ Claude Sessions >               │ ✻ Architecting… (12s · ↓ 3.1k)   │
+│ ▌1. 🟡 dotfiles      Running    │                                  │
+│  2. 🔴 my-app        Waiting    │ ❯ Do you want to make this edit? │
+│  3. 🟢 api-server    Done       │   ← 選択中セッションの実画面     │
+╰─────────────────────────────────┴──────────────────────────────────╯
 ```
 
 - **Running** 🟡 — Claude が生成・ツール実行中
 - **Waiting** 🔴 — 権限確認などでユーザーの応答待ち(要対応)
 - **Done** 🟢 — 応答が終わり、次の入力を待っているだけ
 
-**`CMD+s`** でモーダルを開き:
+**`CMD+s`** でポップアップを開き:
 
 - **数字キー (1〜9)** — 押した瞬間にそのセッションのペインへジャンプ(別 workspace は workspace ごと切り替え)
-- **↑↓ + Enter** — カーソル移動して選択
-- **`/`** — ファジー検索モードに切り替えて絞り込み
-- **Esc** — 閉じる
+- **↑↓** — カーソル移動。右側のプレビューが追従する。**Enter** で選択
+- **文字入力** — ファジー検索で絞り込み
+- **Esc** — 閉じる(ポップアップペインは自動で消える)
 
-外部依存はありません。
+プレビュー付きポップアップには [fzf](https://github.com/junegunn/fzf) を使います(ログインシェルの PATH から自動検出)。fzf が無い環境では wezterm 組み込みの InputSelector モーダルに自動フォールバックします。
 
 ## 必要環境
 
 - wezterm 20240127 以降
+- fzf 0.25 以降(プレビュー付きポップアップに使用。無ければ InputSelector にフォールバック)
 - ローカルペインのみ対応(SSH / mux リモートのペインはプロセス情報が取れないため一覧に出ません)
 
 ## インストール
@@ -65,6 +66,11 @@ table.insert(config.keys, { key = "b", mods = "LEADER", action = csm.action.show
 ```lua
 csm.apply_to_config(config, {
   picker = {
+    preview = true,           -- fzf ポップアップを使う (false で常に InputSelector)
+    popup_size = 0.45,        -- ポップアップペインの高さ (割合)
+    preview_window = "right,60%",  -- fzf の --preview-window
+    preview_lines = 40,       -- プレビューに表示する行数
+    -- 以下は InputSelector フォールバック時の設定
     title = "Claude Code Sessions",
     fuzzy = false,            -- true にすると最初からファジー検索で開く
     alphabet = "123456789",   -- 行に割り当てる選択キー

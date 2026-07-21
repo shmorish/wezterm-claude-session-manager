@@ -36,6 +36,12 @@ t.eq(config.defaults.picker.title, "Claude Code Sessions", "default picker title
 t.eq(config.defaults.picker.fuzzy, false, "default is number-select mode, not fuzzy")
 t.eq(config.defaults.picker.alphabet, "123456789", "number keys for quick selection")
 t.eq(config.defaults.picker.center, true, "default picker centering")
+
+-- fzf プレビューポップアップの既定値
+t.eq(config.defaults.picker.preview, true, "preview popup enabled by default")
+t.eq(config.defaults.picker.popup_size, 0.45, "default popup size")
+t.eq(config.defaults.picker.preview_window, "right,60%", "default preview window")
+t.eq(config.defaults.picker.preview_lines, 40, "default preview lines")
 t.eq(config.defaults.sidebar, nil, "sidebar config removed")
 
 -- 既定キーバインドは CMD+s、false で無効化できる

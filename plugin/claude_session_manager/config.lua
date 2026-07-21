@@ -10,6 +10,12 @@ M.defaults = {
     alphabet = "123456789",
     -- ペイン幅に合わせて一覧を横中央寄せする (縦は wezterm の制約で不可)
     center = true,
+    -- fzf が見つかればプレビュー付きポップアップペインで表示する。
+    -- false で常に InputSelector モーダルを使う
+    preview = true,
+    popup_size = 0.45, -- ポップアップペインの高さ (ウィンドウに対する割合)
+    preview_window = "right,60%", -- fzf の --preview-window
+    preview_lines = 40, -- プレビューに表示するペイン末尾の行数
   },
   -- 停止中はユーザーの対応が必要なので赤で目立たせる
   icons = { running = "🟡", waiting = "🔴", done = "🟢" },
