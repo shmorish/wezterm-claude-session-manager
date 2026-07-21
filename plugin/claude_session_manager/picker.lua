@@ -208,7 +208,28 @@ function M.close_popup_if_source(wezterm, window, pane)
   kill_popup_processes(wezterm, pane)
 end
 
--- プレビュー付きポップアップペイン (fzf) を開く。失敗したら false を返す
+-- ポップアップ用ペインを開く。popup_mode = "tab" なら一時的な新規タブで
+-- 全画面表示し、"split" なら従来どおり下部分割ペインを使う。
+-- どちらも選択/キャンセル時に kill されてペインごと消える
+local function spawn_popup(cfg, window, pane, script_file)
+  local args = { "/bin/bash", script_file }
+  if cfg.picker.popup_mode == "split" then
+    return pane:split({
+      direction = "Bottom",
+      size = cfg.picker.popup_size,
+      top_level = true,
+      args = args,
+    })
+  end
+  local tab, popup = window:mux_window():spawn_tab({ args = args })
+  pcall(function()
+    tab:set_title(cfg.picker.title)
+  end)
+  popup:activate()
+  return popup
+end
+
+-- プレビュー付きポップアップ (fzf) を開く。失敗したら false を返す
 local function show_fzf_popup(wezterm, cfg, window, pane, sessions)
   local fzf = find_fzf(wezterm)
   if not fzf then
@@ -231,14 +252,7 @@ local function show_fzf_popup(wezterm, cfg, window, pane, sessions)
     return false
   end
 
-  local ok, popup = pcall(function()
-    return pane:split({
-      direction = "Bottom",
-      size = cfg.picker.popup_size,
-      top_level = true,
-      args = { "/bin/bash", script_file },
-    })
-  end)
+  local ok, popup = pcall(spawn_popup, cfg, window, pane, script_file)
   if not ok or not popup then
     wezterm.log_error("claude-session-manager: failed to open popup: " .. tostring(popup))
     return false

@@ -22,7 +22,9 @@ wezterm 上で並行して動いている Claude Code のセッションを、**
 - **数字キー (1〜9)** — 押した瞬間にそのセッションのペインへジャンプ(別 workspace は workspace ごと切り替え)
 - **↑↓** — カーソル移動。右側のプレビューが追従する。**Enter** で選択
 - **文字入力** — ファジー検索で絞り込み
-- **Esc** または **もう一度 `CMD+s`** — 閉じて元のペインにフォーカスが戻る(ポップアップペインは自動で消える)
+- **Esc** または **もう一度 `CMD+s`** — 閉じて元のペインにフォーカスが戻る(ポップアップタブは自動で消える)
+
+ポップアップは既定で**一時的な新規タブ**として全画面で開きます(既存のペイン分割を崩しません)。従来の下部分割ペインに戻すには `picker.popup_mode = "split"` を設定してください。
 
 プレビュー付きポップアップには [fzf](https://github.com/junegunn/fzf) を使います(ログインシェルの PATH から自動検出)。fzf が無い環境では wezterm 組み込みの InputSelector モーダルに自動フォールバックします。
 
@@ -67,7 +69,8 @@ table.insert(config.keys, { key = "b", mods = "LEADER", action = csm.action.show
 csm.apply_to_config(config, {
   picker = {
     preview = true,           -- fzf ポップアップを使う (false で常に InputSelector)
-    popup_size = 0.45,        -- ポップアップペインの高さ (割合)
+    popup_mode = "tab",       -- "tab" = 一時的な新規タブで全画面表示 / "split" = 下部分割ペイン
+    popup_size = 0.45,        -- popup_mode = "split" 時のペイン高さ (割合)
     preview_window = "right,60%",  -- fzf の --preview-window
     preview_lines = 40,       -- プレビューに表示する行数
     -- 以下は InputSelector フォールバック時の設定

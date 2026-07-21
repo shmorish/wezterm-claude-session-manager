@@ -13,7 +13,10 @@ M.defaults = {
     -- fzf が見つかればプレビュー付きポップアップペインで表示する。
     -- false で常に InputSelector モーダルを使う
     preview = true,
-    popup_size = 0.45, -- ポップアップペインの高さ (ウィンドウに対する割合)
+    -- ポップアップの表示形態: "tab" = 一時的な新規タブで全画面表示、
+    -- "split" = 呼び出し元ウィンドウの下部分割ペイン
+    popup_mode = "tab",
+    popup_size = 0.45, -- popup_mode = "split" 時のペイン高さ (ウィンドウに対する割合)
     preview_window = "right,60%", -- fzf の --preview-window
     preview_lines = 40, -- プレビューに表示するペイン末尾の行数
   },
