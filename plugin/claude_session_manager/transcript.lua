@@ -18,11 +18,14 @@ local HEADERS = { user = "❯ You", assistant = "● Claude" }
 -- cwd を Claude の projects ディレクトリ名にエンコードする。
 -- Claude は非英数字 (/ _ . など) をすべて "-" に置換し、英数字と大小文字は保持する。
 -- 実測: /Users/x/Private/ft_minecraft -> -Users-x-Private-ft-minecraft
+-- wezterm の get_current_working_dir() は末尾に "/" を付けることがあり、そのまま
+-- 変換すると末尾に余分な "-" が付いてディレクトリ名と一致しないため先に除去する。
 function M.encode_cwd(cwd)
   if type(cwd) ~= "string" then
     return nil
   end
-  return (cwd:gsub("[^%w]", "-"))
+  local trimmed = cwd:gsub("/+$", "")
+  return (trimmed:gsub("[^%w]", "-"))
 end
 
 -- 1 メッセージの content から表示テキストを取り出す。

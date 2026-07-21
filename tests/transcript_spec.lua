@@ -15,6 +15,11 @@ t.eq(
   "underscore to dash"
 )
 t.eq(transcript.encode_cwd("/a/b.c/d"), "-a-b-c-d", "dot to dash")
+t.eq(
+  transcript.encode_cwd("/Users/x/proj/"),
+  "-Users-x-proj",
+  "trailing slash stripped (get_current_working_dir 対策)"
+)
 t.eq(transcript.encode_cwd(nil), nil, "nil cwd returns nil")
 
 -- parse_lines: json_parse を注入し、壊れた行やメタ行は無視して table だけ集める
