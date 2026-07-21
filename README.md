@@ -28,6 +28,8 @@ wezterm 上で並行して動いている Claude Code のセッションを、**
 
 プレビュー付きポップアップには [fzf](https://github.com/junegunn/fzf) を使います(ログインシェルの PATH から自動検出)。fzf が無い環境では wezterm 組み込みの InputSelector モーダルに自動フォールバックします。
 
+プレビューは既定で **Claude の会話ログ** (`~/.claude/projects/<cwd>/*.jsonl` の末尾) を整形して表示します。Claude Code の TUI は代替スクリーンで動きスクロールバックを持たないため、ペイン画面 (`get-text`) だと履歴が取れずアイドル時に大きな空白が出るのを避けるためです。会話ログが見つからない場合はペイン画面の表示に自動フォールバックします。`picker.preview_source = "pane"` で常にペイン画面を使うこともできます。
+
 ## 必要環境
 
 - wezterm 20240127 以降
@@ -72,7 +74,10 @@ csm.apply_to_config(config, {
     popup_mode = "tab",       -- "tab" = 一時的な新規タブで全画面表示 / "split" = 下部分割ペイン
     popup_size = 0.45,        -- popup_mode = "split" 時のペイン高さ (割合)
     preview_window = "right,60%",  -- fzf の --preview-window
-    preview_lines = 40,       -- プレビューに表示する行数
+    preview_lines = 40,       -- プレビューに表示する末尾の行数
+    preview_source = "transcript", -- "transcript" = Claude 会話ログを表示 / "pane" = ペイン画面 (get-text)
+    preview_messages = 60,    -- transcript から拾う直近メッセージ数
+    preview_colors = true,    -- ペインの文字色/スタイルを保持 (get-text --escapes)
     -- 以下は InputSelector フォールバック時の設定
     title = "Claude Code Sessions",
     fuzzy = false,            -- true にすると最初からファジー検索で開く

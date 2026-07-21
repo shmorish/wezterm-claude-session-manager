@@ -1,5 +1,6 @@
 local discovery = require("claude_session_manager.discovery")
 local render = require("claude_session_manager.render")
+local transcript = require("claude_session_manager.transcript")
 
 local M = {}
 
@@ -116,9 +117,9 @@ end
 -- キャンセル時 (Esc) は呼び出し元ペインへ「戻る」ジャンプを発行する。
 -- ペインを自分で閉じるとエスケープ列のパースやジャンプと競合するため、
 -- user-var 発行後は待機し、クローズは常に Lua 側 (kill) が行う
--- プレビューの空行を圧縮する awk。Claude Code の TUI は入力ボックスを最下部に固定し、
--- アイドル時は会話エリアを大量の空行でパディングするため、連続する空行を 1 行に圧縮し、
--- 先頭・末尾の空行は落とす (started で最初の内容行より前の空行を抑止)。
+-- get-text フォールバック用のプレビュー空行圧縮 awk。Claude Code の TUI は入力ボックスを
+-- 最下部に固定し、アイドル時は会話エリアを大量の空行でパディングするため、連続する空行を
+-- 1 行に圧縮し、先頭・末尾の空行は落とす (started で最初の内容行より前の空行を抑止)。
 -- --escapes 出力は行末 CR と色 SGR 列を含むので、まず $0 から CR を除去し、空行判定は
 -- 色を除いた見た目コピー vis で行う (truecolor 背景の 48:2::r:g:b を潰すため : も含める)。
 -- 出力は色付きの $0 を使う。]] を含まないので Lua 長括弧 [[ ]] のまま埋め込める。
@@ -131,7 +132,10 @@ local SQUEEZE_AWK =
 local BOTTOM_ANCHOR_AWK =
   [[{ line[NR]=$0 } END { win=ENVIRON["FZF_PREVIEW_LINES"]+0; for (i=NR;i<win;i++) print ""; for (i=1;i<=NR;i++) print line[i] }]]
 
-local function build_script(fzf, wezterm_bin, list_file, binds, origin_pane_id, cfg)
+-- プレビューは事前レンダリング済みの transcript ファイル (<preview_prefix><pane_id>.txt)
+-- があればそれを cat し、無ければ従来どおり get-text にフォールバックする。
+-- 最後に tail と下端寄せ awk を通すのは両経路共通。
+local function build_script(fzf, wezterm_bin, list_file, binds, origin_pane_id, cfg, preview_prefix)
   local bind_option = binds ~= "" and ("--bind='" .. binds .. "' ") or ""
   -- 色/スタイルを保持するなら get-text に --escapes を付ける (fzf preview が ANSI を描画)
   local escapes = cfg.picker.preview_colors and "--escapes " or ""
@@ -140,7 +144,7 @@ local function build_script(fzf, wezterm_bin, list_file, binds, origin_pane_id, 
 set -u
 selected=$("%s" --ansi --delimiter='\t' --with-nth=2.. --layout=reverse --no-info \
   --prompt='Claude Sessions > ' \
-  --preview='"%s" cli get-text %s--pane-id {1} | awk '\''%s'\'' | tail -n %d | awk '\''%s'\''' \
+  --preview='f="%s{1}.txt"; { if [ -s "$f" ]; then cat "$f"; else "%s" cli get-text %s--pane-id {1} | awk '\''%s'\''; fi; } | tail -n %d | awk '\''%s'\''' \
   --preview-window='%s' \
   %s< "%s")
 if [ -n "$selected" ]; then
@@ -152,6 +156,7 @@ printf '\033]1337;SetUserVar=%s=%%s\007' "$(printf %%s "$target" | /usr/bin/base
 exec sleep 15
 ]],
     fzf,
+    preview_prefix,
     wezterm_bin,
     escapes,
     SQUEEZE_AWK,
@@ -249,6 +254,28 @@ local function spawn_popup(cfg, window, pane, script_file)
   return popup
 end
 
+-- 各セッションのプレビューを事前レンダリングして <prefix><pane_id>.txt に書き出す。
+-- preview_source = "transcript" のとき Claude 会話ログを整形して書き、取れなければ
+-- 空ファイルにする (空 = get-text フォールバック / 前回の残骸クリアも兼ねる)。
+local function write_preview_files(wezterm, cfg, sessions, prefix)
+  if cfg.picker.preview_source ~= "transcript" then
+    return
+  end
+  local home_dir = wezterm.home_dir
+  for _, session in ipairs(sessions) do
+    local text = nil
+    if session.cwd then
+      local ok, result = pcall(transcript.preview_text, wezterm, session.cwd, home_dir, {
+        max_messages = cfg.picker.preview_messages,
+      })
+      if ok then
+        text = result
+      end
+    end
+    write_file(prefix .. tostring(session.pane_id) .. ".txt", text or "")
+  end
+end
+
 -- プレビュー付きポップアップ (fzf) を開く。失敗したら false を返す
 local function show_fzf_popup(wezterm, cfg, window, pane, sessions)
   local fzf = find_fzf(wezterm)
@@ -260,14 +287,24 @@ local function show_fzf_popup(wezterm, cfg, window, pane, sessions)
   local key = tostring(window:mux_window():window_id())
   local list_file = temp_dir() .. "/claude-session-manager-" .. key .. ".list"
   local script_file = temp_dir() .. "/claude-session-manager-" .. key .. ".sh"
+  local preview_prefix = temp_dir() .. "/claude-session-preview-"
+
+  write_preview_files(wezterm, cfg, sessions, preview_prefix)
 
   local lines = render.fzf_lines(choices)
   if not write_file(list_file, table.concat(lines, "\n") .. "\n") then
     return false
   end
   local wezterm_bin = (wezterm.executable_dir or "") .. "/wezterm"
-  local script =
-    build_script(fzf, wezterm_bin, list_file, render.fzf_binds(#choices), pane:pane_id(), cfg)
+  local script = build_script(
+    fzf,
+    wezterm_bin,
+    list_file,
+    render.fzf_binds(#choices),
+    pane:pane_id(),
+    cfg,
+    preview_prefix
+  )
   if not write_file(script_file, script) then
     return false
   end

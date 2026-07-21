@@ -18,7 +18,11 @@ M.defaults = {
     popup_mode = "tab",
     popup_size = 0.45, -- popup_mode = "split" 時のペイン高さ (ウィンドウに対する割合)
     preview_window = "right,60%", -- fzf の --preview-window
-    preview_lines = 40, -- プレビューに表示するペイン末尾の行数
+    preview_lines = 40, -- プレビューに表示する末尾の行数
+    -- プレビューのデータ源: "transcript" = Claude 会話ログ (既定, 空白問題なし)、
+    -- "pane" = 従来のペイン画面 (get-text)。transcript が見つからなければ pane に自動フォールバック
+    preview_source = "transcript",
+    preview_messages = 60, -- transcript から拾う直近メッセージ数
     -- true でペインの文字色/スタイルを保持する (get-text --escapes)。
     -- 背景色は各セルの色付き部分のみ反映され、プレビュー全体の地色は fzf 側の設定
     preview_colors = true,
