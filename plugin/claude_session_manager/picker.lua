@@ -126,25 +126,27 @@ end
 local SQUEEZE_AWK =
   [[{ gsub(/\r/,"",$0); vis=$0; gsub(/\033\[[0-9;:?]*[A-Za-z]/,"",vis); if (vis ~ /^[ \t]*$/) pending=1; else { if (pending && started) print ""; pending=0; started=1; print } }]]
 
--- 圧縮後のコンテンツが短いと fzf がプレビュー窓の下部を空白で埋めてしまう。
--- 不足分を先頭に空行で詰めてコンテンツを窓の下端へ寄せ、実端末と同じ見え方にする。
--- fzf が渡す FZF_PREVIEW_LINES を使い、未設定 (0) なら詰めない (従来どおり上詰め)。
-local BOTTOM_ANCHOR_AWK =
-  [[{ line[NR]=$0 } END { win=ENVIRON["FZF_PREVIEW_LINES"]+0; for (i=NR;i<win;i++) print ""; for (i=1;i<=NR;i++) print line[i] }]]
+-- コンテンツを常にプレビュー窓の下端へ寄せる awk。
+-- 窓の高さ (fzf が渡す FZF_PREVIEW_LINES) 分の末尾行だけを出力し、行数が足りない
+-- ときだけ不足分を先頭に空行で詰める。これで「窓より短くて下が空く」「固定 tail が
+-- 窓より小さくて上が空く」の両方を防ぐ。FZF_PREVIEW_LINES 未設定時は %d を代替値に使う。
+local BOTTOM_ANCHOR_FMT =
+  [[{ b[NR]=$0 } END { win=ENVIRON["FZF_PREVIEW_LINES"]+0; if (win<=0) win=%d; s=(NR>win)?NR-win+1:1; c=NR-s+1; for (i=c;i<win;i++) print ""; for (i=s;i<=NR;i++) print b[i] }]]
 
 -- プレビューは事前レンダリング済みの transcript ファイル (<preview_prefix><pane_id>.txt)
 -- があればそれを cat し、無ければ従来どおり get-text にフォールバックする。
--- 最後に tail と下端寄せ awk を通すのは両経路共通。
+-- 最後に下端寄せ awk を通すのは両経路共通 (窓の高さ分だけ末尾を表示)。
 local function build_script(fzf, wezterm_bin, list_file, binds, origin_pane_id, cfg, preview_prefix)
   local bind_option = binds ~= "" and ("--bind='" .. binds .. "' ") or ""
   -- 色/スタイルを保持するなら get-text に --escapes を付ける (fzf preview が ANSI を描画)
   local escapes = cfg.picker.preview_colors and "--escapes " or ""
+  local bottom_anchor = string.format(BOTTOM_ANCHOR_FMT, cfg.picker.preview_lines)
   return string.format(
     [[#!/bin/bash
 set -u
 selected=$("%s" --ansi --delimiter='\t' --with-nth=2.. --layout=reverse --no-info \
   --prompt='Claude Sessions > ' \
-  --preview='f="%s{1}.txt"; { if [ -s "$f" ]; then cat "$f"; else "%s" cli get-text %s--pane-id {1} | awk '\''%s'\''; fi; } | tail -n %d | awk '\''%s'\''' \
+  --preview='f="%s{1}.txt"; { if [ -s "$f" ]; then cat "$f"; else "%s" cli get-text %s--pane-id {1} | awk '\''%s'\''; fi; } | awk '\''%s'\''' \
   --preview-window='%s' \
   %s< "%s")
 if [ -n "$selected" ]; then
@@ -160,8 +162,7 @@ exec sleep 15
     wezterm_bin,
     escapes,
     SQUEEZE_AWK,
-    cfg.picker.preview_lines,
-    BOTTOM_ANCHOR_AWK,
+    bottom_anchor,
     cfg.picker.preview_window,
     bind_option,
     list_file,
