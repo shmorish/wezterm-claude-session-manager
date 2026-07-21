@@ -119,19 +119,20 @@ end
 -- プレビューの空行処理を行う awk プログラムを選ぶ。
 -- Claude Code の TUI は入力ボックスを最下部に固定し、アイドル時は会話エリアを
 -- 大量の空行でパディングするため、tail に渡す前に空行を間引く。
--- --escapes 付きの出力には色のエスケープ列と CR が混ざり素朴な空行判定を壊すので、
--- 判定用に色/CR を除いた見た目コピー vis を作り、出力は元の $0 (色付き) を使う。
+-- --escapes 付きの出力は各行末に CR が付き、これを残すと fzf プレビュー最下部に
+-- 余分な空行が出るので、まず $0 から CR を除去する (出力・判定の両方に効かせる)。
+-- 空行判定は色 SGR 列を除いた見た目コピー vis で行い、出力は色付きの $0 を使う。
 -- どちらの awk も ]] を含まないので Lua 長括弧 [[ ]] のまま埋め込める。
 local function blank_filter_awk(mode)
-  -- vis を作る前処理 (色 SGR 列と CR を除去)
-  local strip = [[vis=$0; gsub(/\033\[[0-9;?]*[A-Za-z]/,"",vis); gsub(/\r/,"",vis);]]
+  -- 前処理: 行末 CR を除去し、色を除いた見た目コピー vis を作る
+  local prep = [[gsub(/\r/,"",$0); vis=$0; gsub(/\033\[[0-9;?]*[A-Za-z]/,"",vis);]]
   if mode == "squeeze" then
     -- 連続する空行を 1 行に圧縮しつつ、先頭と末尾の空行は出力しない
     -- (started で最初の内容行より前の空行を抑止する)
-    return "{ " .. strip .. [[ if (vis ~ /^[ \t]*$/) pending=1; else { if (pending && started) print ""; pending=0; started=1; print } }]]
+    return "{ " .. prep .. [[ if (vis ~ /^[ \t]*$/) pending=1; else { if (pending && started) print ""; pending=0; started=1; print } }]]
   end
   -- "strip": 空白のみの行をすべて除去する
-  return "{ " .. strip .. [[ if (vis !~ /^[ \t]*$/) print }]]
+  return "{ " .. prep .. [[ if (vis !~ /^[ \t]*$/) print }]]
 end
 
 local function build_script(fzf, wezterm_bin, list_file, binds, origin_pane_id, cfg)
