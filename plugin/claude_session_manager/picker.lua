@@ -98,8 +98,9 @@ function M.jump_to_pane(wezterm, window, pane, pane_id)
 end
 
 -- fzf を動かす一時スクリプトを生成する。
--- 選択結果は SetUserVar エスケープシーケンスで Lua 側に渡す
-local function build_script(fzf, wezterm_bin, list_file, binds, cfg)
+-- 選択結果は SetUserVar エスケープシーケンスで Lua 側に渡す。
+-- キャンセル時 (Esc / kill) は呼び出し元ペインへ「戻る」ジャンプを発行する
+local function build_script(fzf, wezterm_bin, list_file, binds, origin_pane_id, cfg)
   local bind_option = binds ~= "" and ("--bind='" .. binds .. "' ") or ""
   return string.format(
     [[#!/bin/bash
@@ -110,10 +111,12 @@ selected=$("%s" --ansi --delimiter='\t' --with-nth=2.. --layout=reverse --no-inf
   --preview-window='%s' \
   %s< "%s")
 if [ -n "$selected" ]; then
-  pane_id=${selected%%%%$'\t'*}
-  printf '\033]1337;SetUserVar=%s=%%s\007' "$(printf %%s "$pane_id" | /usr/bin/base64)"
-  sleep 0.2
+  target=${selected%%%%$'\t'*}
+else
+  target=%d
 fi
+printf '\033]1337;SetUserVar=%s=%%s\007' "$(printf %%s "$target" | /usr/bin/base64)"
+sleep 0.2
 ]],
     fzf,
     wezterm_bin,
@@ -121,8 +124,52 @@ fi
     cfg.picker.preview_window,
     bind_option,
     list_file,
+    origin_pane_id,
     M.JUMP_USER_VAR
   )
+end
+
+-- window ごとに開いているポップアップの pane_id を wezterm.GLOBAL の
+-- フラットなスカラーキーで追跡する (トグル用)
+local function popup_key(window)
+  return "claude_session_manager_popup_" .. tostring(window:mux_window():window_id())
+end
+
+local function stored_popup_id(wezterm, window)
+  local value = wezterm.GLOBAL[popup_key(window)]
+  if value == nil or value == false then
+    return nil
+  end
+  return tonumber(tostring(value))
+end
+
+-- プロセスツリーから fzf の pid を探す
+local function find_fzf_pid(info)
+  if type(info) ~= "table" then
+    return nil
+  end
+  if info.name == "fzf" then
+    return info.pid
+  end
+  for _, child in pairs(info.children or {}) do
+    local pid = find_fzf_pid(child)
+    if pid then
+      return pid
+    end
+  end
+  return nil
+end
+
+-- 開いているポップアップを閉じる。fzf を kill するとスクリプトが
+-- キャンセル扱いで「元のペインへ戻る」ジャンプを発行して終了する
+local function close_popup(wezterm, popup_pane)
+  local ok, info = pcall(function()
+    return popup_pane:get_foreground_process_info()
+  end)
+  local pid = ok and info and (find_fzf_pid(info) or info.pid) or nil
+  if pid then
+    pcall(wezterm.run_child_process, { "/bin/kill", tostring(pid) })
+  end
 end
 
 -- プレビュー付きポップアップペイン (fzf) を開く。失敗したら false を返す
@@ -142,7 +189,8 @@ local function show_fzf_popup(wezterm, cfg, window, pane, sessions)
     return false
   end
   local wezterm_bin = (wezterm.executable_dir or "") .. "/wezterm"
-  local script = build_script(fzf, wezterm_bin, list_file, render.fzf_binds(#choices), cfg)
+  local script =
+    build_script(fzf, wezterm_bin, list_file, render.fzf_binds(#choices), pane:pane_id(), cfg)
   if not write_file(script_file, script) then
     return false
   end
@@ -159,6 +207,7 @@ local function show_fzf_popup(wezterm, cfg, window, pane, sessions)
     wezterm.log_error("claude-session-manager: failed to open popup: " .. tostring(popup))
     return false
   end
+  wezterm.GLOBAL[popup_key(window)] = popup:pane_id()
   return true
 end
 
@@ -192,8 +241,19 @@ local function show_selector(wezterm, cfg, window, pane, sessions)
   )
 end
 
--- セッション一覧を表示する (fzf ポップアップ、なければ InputSelector)
+-- セッション一覧を表示する (fzf ポップアップ、なければ InputSelector)。
+-- ポップアップが既に開いていればトグルとして閉じる
 function M.show(wezterm, cfg, window, pane)
+  local existing_id = stored_popup_id(wezterm, window)
+  if existing_id then
+    wezterm.GLOBAL[popup_key(window)] = false
+    local ok, popup_pane = pcall(wezterm.mux.get_pane, existing_id)
+    if ok and popup_pane then
+      close_popup(wezterm, popup_pane)
+      return
+    end
+  end
+
   local sessions = discovery.collect(wezterm, cfg)
   if cfg.picker.preview and #sessions > 0 then
     if show_fzf_popup(wezterm, cfg, window, pane, sessions) then
