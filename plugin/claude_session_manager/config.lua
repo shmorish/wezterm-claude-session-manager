@@ -22,6 +22,9 @@ M.defaults = {
     -- プレビューの空行処理: "strip" = 空行を全除去して密に表示、
     -- "squeeze" = 連続空行を1行に圧縮して区切りを残す
     preview_blank_mode = "squeeze",
+    -- true でペインの文字色/スタイルを保持する (get-text --escapes)。
+    -- 背景色は各セルの色付き部分のみ反映され、プレビュー全体の地色は fzf 側の設定
+    preview_colors = true,
   },
   -- 停止中はユーザーの対応が必要なので赤で目立たせる
   icons = { running = "🟡", waiting = "🔴", done = "🟢" },

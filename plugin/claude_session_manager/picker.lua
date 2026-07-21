@@ -119,24 +119,30 @@ end
 -- プレビューの空行処理を行う awk プログラムを選ぶ。
 -- Claude Code の TUI は入力ボックスを最下部に固定し、アイドル時は会話エリアを
 -- 大量の空行でパディングするため、tail に渡す前に空行を間引く。
+-- --escapes 付きの出力には色のエスケープ列と CR が混ざり素朴な空行判定を壊すので、
+-- 判定用に色/CR を除いた見た目コピー vis を作り、出力は元の $0 (色付き) を使う。
 -- どちらの awk も ]] を含まないので Lua 長括弧 [[ ]] のまま埋め込める。
 local function blank_filter_awk(mode)
+  -- vis を作る前処理 (色 SGR 列と CR を除去)
+  local strip = [[vis=$0; gsub(/\033\[[0-9;?]*[A-Za-z]/,"",vis); gsub(/\r/,"",vis);]]
   if mode == "squeeze" then
     -- 連続する空行を 1 行に圧縮しつつ、末尾の空行は出力しない
-    return [[NF{ if (pending) print ""; pending=0; print } !NF{ pending=1 }]]
+    return "{ " .. strip .. [[ if (vis ~ /^[ \t]*$/) pending=1; else { if (pending) print ""; pending=0; print } }]]
   end
-  -- "strip": 空白のみの行 (NF==0) をすべて除去する
-  return [[NF]]
+  -- "strip": 空白のみの行をすべて除去する
+  return "{ " .. strip .. [[ if (vis !~ /^[ \t]*$/) print }]]
 end
 
 local function build_script(fzf, wezterm_bin, list_file, binds, origin_pane_id, cfg)
   local bind_option = binds ~= "" and ("--bind='" .. binds .. "' ") or ""
+  -- 色/スタイルを保持するなら get-text に --escapes を付ける (fzf preview が ANSI を描画)
+  local escapes = cfg.picker.preview_colors and "--escapes " or ""
   return string.format(
     [[#!/bin/bash
 set -u
 selected=$("%s" --ansi --delimiter='\t' --with-nth=2.. --layout=reverse --no-info \
   --prompt='Claude Sessions > ' \
-  --preview='"%s" cli get-text --pane-id {1} | awk '\''%s'\'' | tail -n %d' \
+  --preview='"%s" cli get-text %s--pane-id {1} | awk '\''%s'\'' | tail -n %d' \
   --preview-window='%s' \
   %s< "%s")
 if [ -n "$selected" ]; then
@@ -149,6 +155,7 @@ exec sleep 15
 ]],
     fzf,
     wezterm_bin,
+    escapes,
     blank_filter_awk(cfg.picker.preview_blank_mode),
     cfg.picker.preview_lines,
     cfg.picker.preview_window,
