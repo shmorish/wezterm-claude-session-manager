@@ -133,26 +133,6 @@ local SQUEEZE_AWK =
 local BOTTOM_ANCHOR_FMT =
   [[{ b[NR]=$0 } END { win=ENVIRON["FZF_PREVIEW_LINES"]+0; if (win<=0) win=%d; s=(NR>win)?NR-win+1:1; c=NR-s+1; for (i=c;i<win;i++) print ""; for (i=s;i<=NR;i++) print b[i] }]]
 
--- preview_window で折り返し (wrap) を有効にしたとき用の下端寄せ awk。
--- 論理行ではなく「折り返し後の実表示行数」で末尾を数える必要がある。fzf が渡す
--- FZF_PREVIEW_COLUMNS を桁数として各行の表示幅から行数を見積もり、窓の高さ
--- (FZF_PREVIEW_LINES) を超えない範囲で新しい行から詰め、最新行が必ず最下部に残るようにする。
--- 表示幅は LC_ALL=C 前提でバイト列から UTF-8 幅を近似 (ASCII=1、2byte=1、3/4byte=2)。
--- 未設定時は %d (行) / %d (桁) を代替値に使う。%%c は sprintf のリテラル。
-local BOTTOM_ANCHOR_WRAP_FMT =
-  [[function dw(s,   n,i,w,c){ gsub(/\033\[[0-9;:?]*[A-Za-z]/,"",s); n=length(s); w=0; i=1; while(i<=n){ c=ord[substr(s,i,1)]; if(c<128){w+=1;i+=1}else if(c<192){i+=1}else if(c<224){w+=1;i+=2}else if(c<240){w+=2;i+=3}else{w+=2;i+=4} } return w } BEGIN{ for(i=0;i<256;i++) ord[sprintf("%%c",i)]=i } { b[NR]=$0 } END{ win=ENVIRON["FZF_PREVIEW_LINES"]+0; if(win<=0)win=%d; cols=ENVIRON["FZF_PREVIEW_COLUMNS"]+0; if(cols<=0)cols=%d; if(win<1)win=1; if(cols<1)cols=1; for(i=1;i<=NR;i++){ d=dw(b[i]); r=int((d+cols-1)/cols); if(r<1)r=1; rows[i]=r } acc=0; start=NR; for(i=NR;i>=1;i--){ if(acc>0 && acc+rows[i]>win) break; acc+=rows[i]; start=i } for(k=0;k<win-acc;k++) print ""; for(i=start;i<=NR;i++) print b[i] }]]
-
--- preview_window 文字列から折り返しが有効かを判定する ("wrap" を含み "nowrap" を含まない)
-local function preview_wraps(preview_window)
-  if type(preview_window) ~= "string" then
-    return false
-  end
-  if preview_window:find("nowrap", 1, true) then
-    return false
-  end
-  return preview_window:find("wrap", 1, true) ~= nil
-end
-
 -- プレビューは事前レンダリング済みの transcript ファイル (<preview_prefix><pane_id>.txt)
 -- があればそれを cat し、無ければ従来どおり get-text にフォールバックする。
 -- 最後に下端寄せ awk を通すのは両経路共通 (窓の高さ分だけ末尾を表示)。
@@ -160,22 +140,13 @@ local function build_script(fzf, wezterm_bin, list_file, binds, origin_pane_id, 
   local bind_option = binds ~= "" and ("--bind='" .. binds .. "' ") or ""
   -- 色/スタイルを保持するなら get-text に --escapes を付ける (fzf preview が ANSI を描画)
   local escapes = cfg.picker.preview_colors and "--escapes " or ""
-  -- 折り返し時は「折り返し後の実表示行数」で下端寄せする awk を、非折り返し時は
-  -- 従来の論理行ベースの awk を使う。折り返し awk は表示幅計算のため LC_ALL=C 固定。
-  local bottom_anchor, anchor_cmd
-  if preview_wraps(cfg.picker.preview_window) then
-    bottom_anchor = string.format(BOTTOM_ANCHOR_WRAP_FMT, cfg.picker.preview_lines, 80)
-    anchor_cmd = "LC_ALL=C awk"
-  else
-    bottom_anchor = string.format(BOTTOM_ANCHOR_FMT, cfg.picker.preview_lines)
-    anchor_cmd = "awk"
-  end
+  local bottom_anchor = string.format(BOTTOM_ANCHOR_FMT, cfg.picker.preview_lines)
   return string.format(
     [[#!/bin/bash
 set -u
 selected=$("%s" --ansi --delimiter='\t' --with-nth=2.. --layout=reverse --no-info \
   --prompt='Claude Sessions > ' \
-  --preview='f="%s{1}.txt"; { if [ -s "$f" ]; then cat "$f"; else "%s" cli get-text %s--pane-id {1} | awk '\''%s'\''; fi; } | %s '\''%s'\''' \
+  --preview='f="%s{1}.txt"; { if [ -s "$f" ]; then cat "$f"; else "%s" cli get-text %s--pane-id {1} | awk '\''%s'\''; fi; } | awk '\''%s'\''' \
   --preview-window='%s' \
   %s< "%s")
 if [ -n "$selected" ]; then
@@ -191,7 +162,6 @@ exec sleep 15
     wezterm_bin,
     escapes,
     SQUEEZE_AWK,
-    anchor_cmd,
     bottom_anchor,
     cfg.picker.preview_window,
     bind_option,

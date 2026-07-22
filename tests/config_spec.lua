@@ -41,7 +41,7 @@ t.eq(config.defaults.picker.center, true, "default picker centering")
 t.eq(config.defaults.picker.preview, true, "preview popup enabled by default")
 t.eq(config.defaults.picker.popup_mode, "tab", "popup opens in a temporary tab by default")
 t.eq(config.defaults.picker.popup_size, 0.45, "default popup size for split mode")
-t.eq(config.defaults.picker.preview_window, "right,60%,wrap", "default preview window")
+t.eq(config.defaults.picker.preview_window, "right,60%", "default preview window")
 t.eq(config.defaults.picker.preview_lines, 40, "default preview lines")
 t.eq(config.defaults.sidebar, nil, "sidebar config removed")
 

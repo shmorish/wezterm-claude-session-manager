@@ -90,7 +90,7 @@ csm.apply_to_config(config, {
     preview = true,           -- use the fzf popup (false = always InputSelector)
     popup_mode = "tab",       -- "tab" = full-screen temporary tab / "split" = bottom split pane
     popup_size = 0.45,        -- pane height (fraction) when popup_mode = "split"
-    preview_window = "right,60%,wrap",  -- fzf's --preview-window ("wrap" wraps long lines; use "nowrap" to truncate)
+    preview_window = "right,60%",  -- fzf's --preview-window
     preview_lines = 40,       -- number of trailing lines to show in the preview
     preview_source = "transcript", -- "transcript" = Claude conversation log / "pane" = pane screen (get-text)
     preview_messages = 60,    -- number of recent messages to pull from the transcript
