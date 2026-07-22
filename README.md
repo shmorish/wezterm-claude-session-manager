@@ -1,44 +1,61 @@
 # wezterm-claude-session-manager
 
-A wezterm plugin that lists all running [Claude Code](https://claude.com/claude-code) sessions in a popup with **live preview** — see each session's status and screen at a glance, then jump to it with a single keystroke.
-
-wezterm 上で並行して動いている Claude Code のセッションを、**ライブプレビュー付きのポップアップ**で一覧表示する wezterm プラグインです。↑↓で選択中のセッションの画面がリアルタイムで右側に表示され、数字キー一発でそのペインへジャンプできます。
+A [WezTerm](https://wezterm.org/) plugin that lists every running [Claude Code](https://claude.com/claude-code) session in a popup with **live preview** — see each session's status and screen at a glance, then jump to it with a single keystroke.
 
 ```
 ├─────────────────────────────────┬──────────────────────────────────┤
 │ Claude Sessions >               │ ✻ Architecting… (12s · ↓ 3.1k)   │
 │ ▌1. 🟡 dotfiles      Running    │                                  │
 │  2. 🔴 my-app        Waiting    │ ❯ Do you want to make this edit? │
-│  3. 🟢 api-server    Done       │   ← 選択中セッションの実画面     │
+│  3. 🟢 api-server    Done       │   ← live screen of the selection │
 ╰─────────────────────────────────┴──────────────────────────────────╯
 ```
 
-- **Running** 🟡 — Claude が生成・ツール実行中
-- **Waiting** 🔴 — 権限確認などでユーザーの応答待ち(要対応)
-- **Done** 🟢 — 応答が終わり、次の入力を待っているだけ
+Move the cursor with `↑`/`↓` and the preview on the right follows in real time, so you can watch what any session is doing before you switch to it.
 
-**`CMD+s`** でポップアップを開き:
+## Status
 
-- **数字キー (1〜9)** — 押した瞬間にそのセッションのペインへジャンプ(別 workspace は workspace ごと切り替え)
-- **↑↓** — カーソル移動。右側のプレビューが追従する。**Enter** で選択
-- **文字入力** — ファジー検索で絞り込み
-- **Esc** または **もう一度 `CMD+s`** — 閉じて元のペインにフォーカスが戻る(ポップアップタブは自動で消える)
+Each session is classified into one of three states:
 
-ポップアップは既定で**一時的な新規タブ**として全画面で開きます(既存のペイン分割を崩しません)。従来の下部分割ペインに戻すには `picker.popup_mode = "split"` を設定してください。
+- **Running** 🟡 — Claude is generating output or running a tool.
+- **Waiting** 🔴 — Claude is waiting for you (e.g. a permission prompt). Needs your attention.
+- **Done** 🟢 — Claude has finished responding and is idle, waiting for your next input.
 
-プレビュー付きポップアップには [fzf](https://github.com/junegunn/fzf) を使います(ログインシェルの PATH から自動検出)。fzf が無い環境では wezterm 組み込みの InputSelector モーダルに自動フォールバックします。
+## Usage
 
-プレビューは既定で **Claude の会話ログ** (`~/.claude/projects/<cwd>/*.jsonl` の末尾) を整形して表示します。Claude Code の TUI は代替スクリーンで動きスクロールバックを持たないため、ペイン画面 (`get-text`) だと履歴が取れずアイドル時に大きな空白が出るのを避けるためです。会話ログが見つからない場合はペイン画面の表示に自動フォールバックします。`picker.preview_source = "pane"` で常にペイン画面を使うこともできます。
+Press **`CMD+s`** to open the popup, then:
 
-## 必要環境
+- **Number keys (`1`–`9`)** — jump straight to that session's pane the moment you press it (switches workspace too if the session lives in another one).
+- **`↑`/`↓`** — move the cursor; the preview follows. Press **Enter** to select.
+- **Type any text** — fuzzy-filter the list.
+- **Esc** or **`CMD+s`** again — close and return focus to your original pane (the popup tab disappears automatically).
 
-- wezterm 20240127 以降
-- fzf 0.25 以降(プレビュー付きポップアップに使用。無ければ InputSelector にフォールバック)
-- ローカルペインのみ対応(SSH / mux リモートのペインはプロセス情報が取れないため一覧に出ません)
+By default the popup opens full-screen as a **temporary new tab**, so it never disturbs your existing pane layout. Set `picker.popup_mode = "split"` to use the classic bottom split pane instead.
 
-## インストール
+The preview popup is powered by [fzf](https://github.com/junegunn/fzf) (auto-detected from your login shell's `PATH`). On systems without fzf it falls back automatically to WezTerm's built-in `InputSelector` modal.
 
-`~/.config/wezterm/wezterm.lua` に追加:
+By default the preview shows a formatted view of **Claude's conversation log** (the tail of `~/.claude/projects/<cwd>/*.jsonl`). Claude Code's TUI runs in the alternate screen and has no scrollback, so reading the pane text (`get-text`) yields no history and leaves large blank areas when a session is idle — the conversation log avoids that. If no log is found, it falls back to the pane screen. Set `picker.preview_source = "pane"` to always use the pane screen.
+
+## Requirements
+
+- WezTerm 20240127 or later
+- [Claude Code](https://claude.com/claude-code) — the sessions this plugin discovers (native binary or the npm build)
+- [fzf](https://github.com/junegunn/fzf) 0.25 or later — **optional**, used only for the preview popup. Without it, the plugin falls back to WezTerm's built-in `InputSelector` modal (list only, no preview).
+- Local panes only — SSH / mux remote panes expose no process info, so they never appear in the list.
+
+### Platform support
+
+This plugin is developed and tested on **macOS**.
+
+- **macOS** — fully supported out of the box.
+- **Linux** — the preview popup works (it shells out to `/bin/bash` / `/bin/zsh`), but the default `CMD+s` keybind does not exist; set your own key with `keybind = { key = "s", mods = "SUPER" }` (or `CTRL`).
+- **Windows** — the fzf preview popup is **not supported** (it relies on a POSIX shell and `/tmp`); the plugin automatically falls back to the `InputSelector` modal. You must also change the default `CMD+s` keybind.
+
+If `CMD` is not a modifier on your platform, either change `keybind` or disable it and bind the action manually (see [Installation](#installation)).
+
+## Installation
+
+Add the following to `~/.config/wezterm/wezterm.lua`:
 
 ```lua
 local wezterm = require("wezterm")
@@ -50,58 +67,58 @@ csm.apply_to_config(config, {})
 return config
 ```
 
-これだけで **`CMD+s`** にセッション一覧モーダルが割り当てられます。
+That alone binds the session list modal to **`CMD+s`**.
 
-キーを変えたい / 自動割り当てを止めたい場合:
+To change the key, or to disable the automatic binding:
 
 ```lua
--- キーを変更
+-- Change the key
 csm.apply_to_config(config, { keybind = { key = "b", mods = "CTRL|SHIFT" } })
 
--- 自動割り当てを無効化して手動で設定
+-- Disable the automatic binding and wire it up manually
 csm.apply_to_config(config, { keybind = false })
 table.insert(config.keys, { key = "b", mods = "LEADER", action = csm.action.show_picker })
 ```
 
-## 設定
+## Configuration
 
-`apply_to_config` の第2引数で上書きできます(すべて省略可):
+Override the defaults via the second argument to `apply_to_config` (everything is optional):
 
 ```lua
 csm.apply_to_config(config, {
   picker = {
-    preview = true,           -- fzf ポップアップを使う (false で常に InputSelector)
-    popup_mode = "tab",       -- "tab" = 一時的な新規タブで全画面表示 / "split" = 下部分割ペイン
-    popup_size = 0.45,        -- popup_mode = "split" 時のペイン高さ (割合)
-    preview_window = "right,60%",  -- fzf の --preview-window
-    preview_lines = 40,       -- プレビューに表示する末尾の行数
-    preview_source = "transcript", -- "transcript" = Claude 会話ログを表示 / "pane" = ペイン画面 (get-text)
-    preview_messages = 60,    -- transcript から拾う直近メッセージ数
-    preview_colors = true,    -- ペインの文字色/スタイルを保持 (get-text --escapes)
-    -- 以下は InputSelector フォールバック時の設定
+    preview = true,           -- use the fzf popup (false = always InputSelector)
+    popup_mode = "tab",       -- "tab" = full-screen temporary tab / "split" = bottom split pane
+    popup_size = 0.45,        -- pane height (fraction) when popup_mode = "split"
+    preview_window = "right,60%,wrap",  -- fzf's --preview-window ("wrap" wraps long lines; use "nowrap" to truncate)
+    preview_lines = 40,       -- number of trailing lines to show in the preview
+    preview_source = "transcript", -- "transcript" = Claude conversation log / "pane" = pane screen (get-text)
+    preview_messages = 60,    -- number of recent messages to pull from the transcript
+    preview_colors = true,    -- keep pane text colors/styles (get-text --escapes)
+    -- The following apply to the InputSelector fallback
     title = "Claude Code Sessions",
-    fuzzy = false,            -- true にすると最初からファジー検索で開く
-    alphabet = "123456789",   -- 行に割り当てる選択キー
-    center = true,            -- 一覧をペイン幅に対して横中央寄せ
+    fuzzy = false,            -- true to open in fuzzy-search mode from the start
+    alphabet = "123456789",   -- selection keys assigned to each row
+    center = true,            -- horizontally center the list within the pane width
   },
   icons  = { running = "🟡", waiting = "🔴", done = "🟢" },
   labels = { running = "Running", waiting = "Waiting", done = "Done" },
   patterns = {
-    -- ペイン末尾テキストに対する部分一致 (小文字扱い)
+    -- Substring match against the pane's trailing text (case-insensitive)
     running = { "esc to interrupt" },
     waiting = { "do you want", "❯ 1." },
-    -- プロセス名 / argv に対する Lua パターン
+    -- Lua patterns matched against process name / argv
     process = { "^claude$", "claude%-code" },
   },
-  keybind = { key = "s", mods = "CMD" },  -- モーダル表示キー (false で自動割り当てなし)
-  scan_lines = 40,            -- 状態判定に読むペイン末尾の行数
+  keybind = { key = "s", mods = "CMD" },  -- key to show the modal (false = no automatic binding)
+  scan_lines = 40,            -- trailing lines of pane text read for state detection
   cwd_display = "basename",   -- "basename" | "shortened" | "full"
-  max_name_width = 18,        -- プロジェクト名の表示幅
-  show_title = true,          -- ペインタイトル (作業内容) を一覧に表示
+  max_name_width = 18,        -- display width of the project name
+  show_title = true,          -- show the pane title (current task) in the list
 })
 ```
 
-ラベルを日本語にしたい場合:
+To localize the labels (e.g. Japanese):
 
 ```lua
 csm.apply_to_config(config, {
@@ -109,45 +126,45 @@ csm.apply_to_config(config, {
 })
 ```
 
-### カスタム利用
+### Custom use
 
-自分のステータスバー等に組み込むこともできます:
+You can pull the raw data into your own status bar or elsewhere:
 
 ```lua
 local counts = csm.counts()     -- { running = 1, waiting = 0, done = 2, total = 3 }
 local sessions = csm.sessions() -- { { pane_id, workspace, cwd, name, state, title }, ... }
 ```
 
-## 状態判定の仕組み
+## How state detection works
 
-各ペインの `get_foreground_process_info()` から Claude Code のプロセス(ネイティブ版 `claude`、npm 版 `node .../claude-code/cli.js`、子プロセスツリー内も含む)を検出し、ペイン末尾のテキストをパターンマッチして状態を決めます:
+For each pane, the plugin inspects `get_foreground_process_info()` to detect a Claude Code process (the native `claude` binary, the npm build `node .../claude-code/cli.js`, and matches anywhere in the child process tree), then pattern-matches the pane's trailing text to determine the state:
 
-1. `esc to interrupt` を含む → **Running**
-2. `do you want` / `❯ 1.` を含む(権限プロンプト) → **Waiting**
-3. どちらもなし → **Done**
+1. Contains `esc to interrupt` → **Running**
+2. Contains `do you want` / `❯ 1.` (permission prompt) → **Waiting**
+3. Neither → **Done**
 
-Claude Code のアップデートで TUI の文言が変わった場合は `patterns` を上書きしてください。
+If a Claude Code update changes the TUI wording, override `patterns` to match.
 
-## 開発
+## Development
 
 ```sh
-# ユニットテスト (wezterm 不要 / lua 5.3+)
+# Unit tests (no wezterm required / lua 5.3+)
 bash tests/run.sh
 ```
 
-ローカルの作業コピーをプラグインとして読み込むには:
+To load a local working copy as a plugin:
 
 ```lua
 local csm = wezterm.plugin.require("file:///path/to/wezterm-claude-session-manager")
 ```
 
-`plugin.require` は git clone するため **コミット済みの内容だけ** が反映されます。
-未コミットの変更を試すときは直接読み込みます:
+`plugin.require` performs a git clone, so **only committed content** is reflected.
+To try uncommitted changes, load it directly:
 
 ```lua
 package.path = "/path/to/wezterm-claude-session-manager/plugin/?.lua;" .. package.path
 local csm = dofile("/path/to/wezterm-claude-session-manager/plugin/init.lua")
 ```
 
-wezterm はプラグインを自動更新しません。取り込み直すには wezterm 内で
-`wezterm.plugin.update_all()` を実行(またはデバッグオーバーレイ Ctrl+Shift+L から)して設定をリロードしてください。
+WezTerm does not auto-update plugins. To pull in new changes, run
+`wezterm.plugin.update_all()` inside WezTerm (or from the debug overlay, Ctrl+Shift+L) and reload your config.
