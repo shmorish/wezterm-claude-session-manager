@@ -17,7 +17,9 @@ M.defaults = {
     -- "split" = 呼び出し元ウィンドウの下部分割ペイン
     popup_mode = "tab",
     popup_size = 0.45, -- popup_mode = "split" 時のペイン高さ (ウィンドウに対する割合)
-    preview_window = "right,60%", -- fzf の --preview-window
+    -- fzf の --preview-window。"wrap" で長い行を折り返す (下端寄せは折り返し後の
+    -- 実表示行数で計算)。折り返したくなければ "nowrap" を指定する
+    preview_window = "right,60%,wrap",
     preview_lines = 40, -- プレビューに表示する末尾の行数
     -- プレビューのデータ源: "transcript" = Claude 会話ログ (既定, 空白問題なし)、
     -- "pane" = 従来のペイン画面 (get-text)。transcript が見つからなければ pane に自動フォールバック
