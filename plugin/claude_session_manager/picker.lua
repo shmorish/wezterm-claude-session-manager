@@ -133,22 +133,67 @@ local SQUEEZE_AWK =
 local BOTTOM_ANCHOR_FMT =
   [[{ b[NR]=$0 } END { win=ENVIRON["FZF_PREVIEW_LINES"]+0; if (win<=0) win=%d; s=(NR>win)?NR-win+1:1; c=NR-s+1; for (i=c;i<win;i++) print ""; for (i=s;i<=NR;i++) print b[i] }]]
 
+-- preview_refresh 有効時に組み込む、プレビューを定期リフレッシュする shell 断片を返す。
+-- fzf は選択移動時しかプレビューを再実行しないため、--listen(Unix ソケット)経由で
+-- 一定間隔ごとに refresh-preview アクションを POST し、表示を最新化する。
+-- transcript モードでは Lua タイマーが .txt を再生成し、この POST で fzf が再 cat する。
+-- pane モードでは POST を受けた fzf が get-text を再実行する。
+-- refresher はソケットへ一度でも接続できた後に接続失敗したら fzf 終了とみなして自壊する
+-- ため、ポップアップが強制 kill されて孤児化してもプロセスが残らない。
+local function refresh_shell(cfg, sock)
+  if not (cfg.picker.preview_refresh and sock and sock ~= "") then
+    return "", "", ""
+  end
+  local interval = tonumber(cfg.picker.preview_refresh_interval) or 1
+  if interval <= 0 then
+    interval = 1
+  end
+  local setup = string.format(
+    [[sock='%s'
+rm -f "$sock"
+if command -v curl >/dev/null 2>&1; then
+  ( connected=0; misses=0
+    while :; do
+      sleep %s
+      if curl -fs --max-time 1 --unix-socket "$sock" -X POST http://localhost/ -d 'refresh-preview' >/dev/null 2>&1; then
+        connected=1
+      elif [ "$connected" = 1 ]; then
+        break
+      else
+        misses=$((misses+1))
+        [ "$misses" -ge 30 ] && break
+      fi
+    done ) &
+  _rpid=$!
+fi
+]],
+    sock,
+    interval
+  )
+  local listen_option = "--listen='" .. sock .. "' "
+  local teardown = [[[ -n "${_rpid:-}" ] && kill "$_rpid" 2>/dev/null]]
+  return setup, listen_option, teardown
+end
+
 -- プレビューは事前レンダリング済みの transcript ファイル (<preview_prefix><pane_id>.txt)
 -- があればそれを cat し、無ければ従来どおり get-text にフォールバックする。
 -- 最後に下端寄せ awk を通すのは両経路共通 (窓の高さ分だけ末尾を表示)。
-local function build_script(fzf, wezterm_bin, list_file, binds, origin_pane_id, cfg, preview_prefix)
+-- preview_refresh 有効時は --listen + refresher で一定間隔ごとに再描画する。
+local function build_script(fzf, wezterm_bin, list_file, binds, origin_pane_id, cfg, preview_prefix, sock)
   local bind_option = binds ~= "" and ("--bind='" .. binds .. "' ") or ""
   -- 色/スタイルを保持するなら get-text に --escapes を付ける (fzf preview が ANSI を描画)
   local escapes = cfg.picker.preview_colors and "--escapes " or ""
   local bottom_anchor = string.format(BOTTOM_ANCHOR_FMT, cfg.picker.preview_lines)
+  local refresh_setup, listen_option, refresh_teardown = refresh_shell(cfg, sock)
   return string.format(
     [[#!/bin/bash
 set -u
-selected=$("%s" --ansi --delimiter='\t' --with-nth=2.. --layout=reverse --no-info \
+%sselected=$("%s" --ansi --delimiter='\t' --with-nth=2.. --layout=reverse --no-info \
   --prompt='Claude Sessions > ' \
   --preview='f="%s{1}.txt"; { if [ -s "$f" ]; then cat "$f"; else "%s" cli get-text %s--pane-id {1} | awk '\''%s'\''; fi; } | awk '\''%s'\''' \
   --preview-window='%s' \
-  %s< "%s")
+  %s%s< "%s")
+%s
 if [ -n "$selected" ]; then
   target=${selected%%%%$'\t'*}
 else
@@ -157,6 +202,7 @@ fi
 printf '\033]1337;SetUserVar=%s=%%s\007' "$(printf %%s "$target" | /usr/bin/base64)"
 exec sleep 15
 ]],
+    refresh_setup,
     fzf,
     preview_prefix,
     wezterm_bin,
@@ -164,12 +210,18 @@ exec sleep 15
     SQUEEZE_AWK,
     bottom_anchor,
     cfg.picker.preview_window,
+    listen_option,
     bind_option,
     list_file,
+    refresh_teardown,
     origin_pane_id,
     M.JUMP_USER_VAR
   )
 end
+
+-- テスト用に純粋な shell 生成関数を公開する (wezterm 依存なしで検証できる)
+M._refresh_shell = refresh_shell
+M._build_script = build_script
 
 -- window ごとに開いているポップアップの pane_id と呼び出し元の pane_id を
 -- wezterm.GLOBAL のフラットなスカラーキーで追跡する (トグル用)。
@@ -277,6 +329,40 @@ local function write_preview_files(wezterm, cfg, sessions, prefix)
   end
 end
 
+-- transcript プレビューを一定間隔で再生成する自己再スケジュール型タイマー。
+-- ポップアップが開いている間だけ .txt を書き直し、閉じたら (追跡中の pane_id が
+-- 消える / mux から取れない) 自然に停止する。fzf 側の refresher が POST する
+-- refresh-preview でこの最新ファイルが再 cat される。
+-- pane モードは write_preview_files が早期 return するのでタイマーは張らない。
+local function schedule_rerender(wezterm, cfg, window, sessions, preview_prefix)
+  if cfg.picker.preview_source ~= "transcript" or not cfg.picker.preview_refresh then
+    return
+  end
+  local interval = tonumber(cfg.picker.preview_refresh_interval) or 1
+  if interval <= 0 then
+    interval = 1
+  end
+  local key_ok, pkey = pcall(popup_key, window)
+  if not key_ok then
+    return
+  end
+
+  local function tick()
+    local id = stored_pane_id(wezterm, pkey)
+    if not id then
+      return -- ポップアップは閉じられた (トグルや選択で追跡情報がクリア済み)
+    end
+    local ok, popup_pane = pcall(wezterm.mux.get_pane, id)
+    if not ok or not popup_pane then
+      return -- ペインが既に消滅している
+    end
+    pcall(write_preview_files, wezterm, cfg, sessions, preview_prefix)
+    wezterm.time.call_after(interval, tick)
+  end
+
+  wezterm.time.call_after(interval, tick)
+end
+
 -- プレビュー付きポップアップ (fzf) を開く。失敗したら false を返す
 local function show_fzf_popup(wezterm, cfg, window, pane, sessions)
   local fzf = find_fzf(wezterm)
@@ -289,6 +375,8 @@ local function show_fzf_popup(wezterm, cfg, window, pane, sessions)
   local list_file = temp_dir() .. "/claude-session-manager-" .. key .. ".list"
   local script_file = temp_dir() .. "/claude-session-manager-" .. key .. ".sh"
   local preview_prefix = temp_dir() .. "/claude-session-preview-"
+  -- fzf --listen 用の Unix ソケット。preview_refresh 有効時のみ使う
+  local sock = temp_dir() .. "/claude-session-fzf-" .. key .. ".sock"
 
   write_preview_files(wezterm, cfg, sessions, preview_prefix)
 
@@ -304,7 +392,8 @@ local function show_fzf_popup(wezterm, cfg, window, pane, sessions)
     render.fzf_binds(#choices),
     pane:pane_id(),
     cfg,
-    preview_prefix
+    preview_prefix,
+    sock
   )
   if not write_file(script_file, script) then
     return false
@@ -317,6 +406,8 @@ local function show_fzf_popup(wezterm, cfg, window, pane, sessions)
   end
   wezterm.GLOBAL[popup_key(window)] = popup:pane_id()
   wezterm.GLOBAL[origin_key(window)] = pane:pane_id()
+  -- transcript プレビューを開いている間だけ定期再生成する (pane モードでは張らない)
+  schedule_rerender(wezterm, cfg, window, sessions, preview_prefix)
   return true
 end
 

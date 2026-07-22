@@ -43,6 +43,13 @@ t.eq(config.defaults.picker.popup_mode, "tab", "popup opens in a temporary tab b
 t.eq(config.defaults.picker.popup_size, 0.45, "default popup size for split mode")
 t.eq(config.defaults.picker.preview_window, "right,60%", "default preview window")
 t.eq(config.defaults.picker.preview_lines, 40, "default preview lines")
+
+-- プレビュー自動更新 (リアルタイム) の既定値
+t.eq(config.defaults.picker.preview_refresh, true, "preview auto-refresh enabled by default")
+t.eq(config.defaults.picker.preview_refresh_interval, 1, "default refresh interval is 1s")
+local slow = config.merge(config.defaults, { picker = { preview_refresh_interval = 3 } })
+t.eq(slow.picker.preview_refresh_interval, 3, "refresh interval overridable")
+t.eq(config.merge(config.defaults, { picker = { preview_refresh = false } }).picker.preview_refresh, false, "auto-refresh can be disabled")
 t.eq(config.defaults.sidebar, nil, "sidebar config removed")
 
 -- 既定キーバインドは CMD+s、false で無効化できる

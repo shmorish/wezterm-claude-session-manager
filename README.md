@@ -36,6 +36,8 @@ The preview popup is powered by [fzf](https://github.com/junegunn/fzf) (auto-det
 
 By default the preview shows a formatted view of **Claude's conversation log** (the tail of `~/.claude/projects/<cwd>/*.jsonl`). Claude Code's TUI runs in the alternate screen and has no scrollback, so reading the pane text (`get-text`) yields no history and leaves large blank areas when a session is idle — the conversation log avoids that. If no log is found, it falls back to the pane screen. Set `picker.preview_source = "pane"` to always use the pane screen.
 
+The preview **updates in real time** while the popup is open (`picker.preview_refresh`, default on). fzf only re-runs its preview when you move the selection, so the plugin opens an fzf `--listen` socket and a small background loop POSTs `refresh-preview` every `picker.preview_refresh_interval` seconds (default 1s). In `transcript` mode a WezTerm timer re-renders the log files on the same cadence; in `pane` mode the refresh re-runs `get-text`. The loop self-terminates when fzf exits, so nothing is left running after the popup closes. Set `picker.preview_refresh = false` to update only on selection changes (requires `curl`, standard on macOS).
+
 ## Requirements
 
 - WezTerm 20240127 or later
@@ -95,6 +97,8 @@ csm.apply_to_config(config, {
     preview_source = "transcript", -- "transcript" = Claude conversation log / "pane" = pane screen (get-text)
     preview_messages = 60,    -- number of recent messages to pull from the transcript
     preview_colors = true,    -- keep pane text colors/styles (get-text --escapes)
+    preview_refresh = true,   -- auto-refresh the preview in real time while the popup is open
+    preview_refresh_interval = 1, -- auto-refresh interval in seconds
     -- The following apply to the InputSelector fallback
     title = "Claude Code Sessions",
     fuzzy = false,            -- true to open in fuzzy-search mode from the start

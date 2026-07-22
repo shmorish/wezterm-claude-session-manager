@@ -23,6 +23,11 @@ M.defaults = {
     -- "pane" = 従来のペイン画面 (get-text)。transcript が見つからなければ pane に自動フォールバック
     preview_source = "transcript",
     preview_messages = 60, -- transcript から拾う直近メッセージ数
+    -- プレビューを一定間隔で自動更新する (fzf --listen + 定期 refresh-preview)。
+    -- transcript モードは Lua タイマーで .txt を再生成し、pane モードは get-text を
+    -- 再実行する。false で従来どおり選択移動時のみ更新
+    preview_refresh = true,
+    preview_refresh_interval = 1, -- プレビュー自動更新の間隔 (秒)
     -- true でペインの文字色/スタイルを保持する (get-text --escapes)。
     -- 背景色は各セルの色付き部分のみ反映され、プレビュー全体の地色は fzf 側の設定
     preview_colors = true,
